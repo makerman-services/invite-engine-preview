@@ -19,7 +19,7 @@ let toastT; const toast = m => { const t = $('#toast'); t.textContent = m; t.hid
 const copyTxt = t => (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Copied'), () => toast('Copy failed'));
 
 // ---------- state (event + guests on this device only) ----------
-function blank() { return { ev: { id: code(10), name: '', host: '', hostEmail: '', date: '', time: '19:00', venue: '', note: '', rsvpBy: '', alcohol: true, kids: false, child: '', age: '', endTime: '', dropOff: '', plusOnes: false, pageBg: '', design: CFG.art.invites[0].id }, bar: { mode: 'choice', mc: 2, cc: 1, m: 2, c: 1 }, guests: [], tab: 'event' }; }
+function blank() { return { ev: { id: code(10), name: '', host: '', hostEmail: '', date: '', time: '19:00', venue: '', note: '', rsvpBy: '', alcohol: true, kids: false, child: '', age: '', endTime: '', dropOff: '', plusOnes: false, pageBg: '', theme: '', src: '', design: CFG.art.invites[0].id }, bar: { mode: 'choice', mc: 2, cc: 1, m: 2, c: 1 }, guests: [], tab: 'event' }; }
 let S = load();
 function load() { try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.ev) return s; } catch (e) {} return blank(); }
 function fixEv() { S.ev.id = S.ev.id || code(10); if (!S.ev.kids && !S.ev.alcohol && ['cock1', 'choice'].includes(S.bar.mode)) S.bar.mode = 'mock2'; if (S.ev.kids) { S.ev.alcohol = false; if (!['mock2', 'custom', 'none'].includes(S.bar.mode)) S.bar.mode = 'mock2'; } }
@@ -105,7 +105,7 @@ function openWallet() {
 // ---------- no Gmail sign-in in this build: "Email sending coming soon" (hosts copy or share links) ----------
 
 // ---------- links + email ----------
-function vars(g) { const ev = S.ev; return { kids: !!ev.kids, event_name: ev.name || 'our party', host_name: ev.host || 'your host', guest_name: g ? g.name : '', date: ev.date ? fmtD(new Date(ev.date + 'T00:00:00')) : 'Date to be confirmed', time: fmtTime(ev.time), venue: ev.venue || 'Venue to be confirmed', host_note: ev.note || '', rsvp_deadline: ev.rsvpBy ? fmtD(new Date(ev.rsvpBy + 'T00:00:00')) : 'soon', delete_date: fmtD(deleteDate(ev)) || '30 days after the event', child_name: ev.child || 'our birthday star', age: ev.age || '', start_time: fmtTime(ev.time), end_time: fmtTime(ev.endTime) || 'late', drop_off_note: ev.dropOff || '' }; }
+function vars(g) { const ev = S.ev; return { kids: !!ev.kids, event_name: ev.name || 'our party', host_name: ev.host || 'your host', guest_name: g ? g.name : '', date: ev.date ? fmtD(new Date(ev.date + 'T00:00:00')) : 'Date to be confirmed', time: fmtTime(ev.time), venue: ev.venue || 'Venue to be confirmed', host_note: ev.note || '', rsvp_deadline: ev.rsvpBy ? fmtD(new Date(ev.rsvpBy + 'T00:00:00')) : 'soon', delete_date: fmtD(deleteDate(ev)) || '30 days after the event', child_name: ev.child || 'our birthday star', age: ev.age || '', start_time: fmtTime(ev.time), end_time: fmtTime(ev.endTime) || 'late', drop_off_note: ev.dropOff || '', theme: ev.theme || '' }; }
 function payload(g) { const e = entitlement(g); return { v: 2, t: g.token, gid: g.id, eid: S.ev.id, ...vars(g), he: S.ev.hostEmail, d: S.ev.design, pb: S.ev.pageBg, k: S.ev.kids ? 1 : 0, po: S.ev.plusOnes ? 1 : 0, u18: g.under18 ? 1 : 0, alc: S.ev.alcohol ? 1 : 0, ch: e.choice ? 1 : 0, m: e.m, c: e.c, cen: couponEvent(), del: deleteDate(S.ev) ? deleteDate(S.ev).getTime() : 0 }; } // entitlement only: NO coupons in the invite
 const base = () => location.origin + location.pathname.replace(/coupon\.html$/, '');
 const dir = () => location.origin + location.pathname.replace(/[^/]*$/, '');
@@ -127,7 +127,7 @@ const shareTitle = g => fillT(S.ev.kids ? C.kids.subject : C.email.subject, vars
 
 // ---------- invite + coupon visuals (text drawn live over the art) ----------
 const art = id => CFG.art.invites.find(a => a.id === id) || CFG.art.invites[0];
-function inviteCard(v, design) { const a = art(design); return `<div class="inv" style="${a.src ? `background-image:url('${esc(a.src)}')` : `background:${a.css}`};color:${a.ink}" data-testid="invite-card">${a.emoji ? `<div class="emo">${a.emoji}</div>` : ''}<div class="pane" style="background:${a.pane}">${v.kids ? `<p>${esc(fillT("You're invited to {child_name}'s birthday party, turning {age}!", v))}</p><h1>${esc(v.child_name)}</h1><p>📅 ${esc(v.date)} · ⏰ ${esc(v.start_time)} to ${esc(v.end_time)}</p>` : `<p>${esc(v.host_name)} would love you to join</p><h1>${esc(v.event_name)}</h1><p>📅 ${esc(v.date)} · ⏰ ${esc(v.time)}</p>`}<p>📍 ${esc(v.venue)}</p>${v.host_note ? `<p><i>${esc(v.host_note)}</i></p>` : ''}</div>${a.ai ? `<small class="artlabel" data-testid="art-label">${esc(C.artLabel)}</small>` : ''}</div>`; }
+function inviteCard(v, design) { const a = art(design); return `<div class="inv" style="${a.src ? `background-image:url('${esc(a.src)}')` : `background:${a.css}`};color:${a.ink}" data-testid="invite-card">${a.emoji ? `<div class="emo">${a.emoji}</div>` : ''}<div class="pane" style="background:${a.pane}">${v.kids ? `<p>${esc(fillT("You're invited to {child_name}'s birthday party, turning {age}!", v))}</p><h1>${esc(v.child_name)}</h1><p>📅 ${esc(v.date)} · ⏰ ${esc(v.start_time)} to ${esc(v.end_time)}</p>` : `<p>${esc(v.host_name)} would love you to join</p><h1>${esc(v.event_name)}</h1><p>📅 ${esc(v.date)} · ⏰ ${esc(v.time)}</p>`}<p>📍 ${esc(v.venue)}</p>${v.theme ? `<p data-testid="card-theme">🎨 ${esc(v.theme)}</p>` : ''}${v.host_note ? `<p><i>${esc(v.host_note)}</i></p>` : ''}</div>${a.ai ? `<small class="artlabel" data-testid="art-label">${esc(C.artLabel)}</small>` : ''}</div>`; }
 function couponCard(text, kind) { return `<div class="cpn" style="background-image:url('${esc(CFG.art[kind])}')" data-testid="coupon-${kind}"><div class="cpt">${esc(text)}</div>${CFG.art.couponAi ? `<small class="artlabel">${esc(C.artLabel)}</small>` : ''}</div>`; }
 
 // ---------- host screens ----------
@@ -150,7 +150,7 @@ function render() {
 }
 function rEvent() {
   const ev = S.ev, f = (k, l, t = 'text', x = '') => `<label>${l}<input data-ev="${k}" type="${t}" value="${esc(ev[k])}" ${x} data-testid="ev-${k}"></label>`;
-  $('#app').innerHTML = `<section class="card"><h2>Your event</h2>${f('name', 'Event name', 'text', 'maxlength="80"')}<div class="grid2">${f('host', 'Your name (host)', 'text', 'maxlength="60"')}${f('hostEmail', 'Your email (optional, for RSVP replies)', 'email', 'maxlength="120"')}${f('date', 'Date', 'date')}${f('time', 'Start time', 'time')}${f('rsvpBy', 'RSVP by', 'date')}${f('venue', 'Venue', 'text', 'maxlength="120"')}</div>
+  $('#app').innerHTML = `<section class="card"><h2>Your event</h2>${f('name', 'Event name', 'text', 'maxlength="80"')}<div class="grid2">${f('host', 'Your name (host)', 'text', 'maxlength="60"')}${f('hostEmail', 'Your email (optional, for RSVP replies)', 'email', 'maxlength="120"')}${f('date', 'Date', 'date')}${f('time', 'Start time', 'time')}${f('rsvpBy', 'RSVP by', 'date')}${f('venue', 'Venue', 'text', 'maxlength="120"')}${f('theme', 'Theme (optional)', 'text', 'maxlength="60"')}</div>${S.prefillNote ? `<p class="note" data-testid="prefill-note">${esc(S.prefillNote)}</p>` : ''}
     <label>Note for guests (optional)<textarea data-ev="note" maxlength="240" data-testid="ev-note">${esc(ev.note)}</textarea></label>
     <label class="row"><input type="checkbox" data-evc="kids" ${ev.kids ? 'checked' : ''} style="width:auto" data-testid="kids-mode"> Kids' party</label>${ev.kids ? `<p class="note" data-testid="kids-note">${esc(C.kids.hostNote)}</p><div class="grid2">${f('child', "Birthday child's first name", 'text', 'maxlength="40"')}${f('age', 'Turning (age)', 'number', 'min="1" max="17"')}${f('endTime', 'Finish time', 'time')}${f('dropOff', 'Drop-off note (optional)', 'text', 'maxlength="120"')}</div>` : ''}
     <label class="row"><input type="checkbox" data-evc="plusOnes" ${ev.plusOnes ? 'checked' : ''} style="width:auto"> Guests can bring plus-ones</label>
@@ -342,6 +342,31 @@ function couponView() {
   draw(); window.addEventListener('storage', e => { if (e.key === UKEY) draw(); });
 }
 
+// ---------- prefill from My Party (bottom-of-page Invitations section or its button) ----------
+// Event details arrive in the URL hash (#prefill=..., never sent to a server, no guest emails). Guest NAMES arrive only by postMessage
+// from the embedding My Party page (checked origin + parent window). Everything stays editable here.
+function applyPrefill(d, guests) {
+  if (!d || typeof d !== 'object') return;
+  const str = (x, n) => String(x == null ? '' : x).slice(0, n), fresh = !S.ev.src || S.ev.src !== str(d.pid, 40);
+  if (fresh) { S = blank(); S.ev.src = str(d.pid, 40); }
+  const ev = S.ev, set = (k, v, n) => { v = str(v, n).trim(); if (v && (fresh || !ev[k])) ev[k] = v; };
+  set('name', d.name, 80); set('host', d.host, 60); if (/^\d{4}-\d{2}-\d{2}$/.test(d.date || '')) set('date', d.date, 10); if (/^\d{2}:\d{2}$/.test(d.time || '')) set('time', d.time, 5); if (/^\d{2}:\d{2}$/.test(d.endTime || '')) set('endTime', d.endTime, 5);
+  set('venue', d.venue, 120); set('theme', d.theme, 60);
+  if (fresh) { ev.kids = !!d.kids; ev.alcohol = !d.kids && d.alcohol !== false; if (ev.kids) { set('child', d.child, 40); if (+d.age > 0) ev.age = String(Math.min(110, Math.round(+d.age))); S.bar.mode = 'mock2'; S.bar.mc = 2; } else if (!ev.alcohol) S.bar.mode = 'mock2'; if (!designs().some(x => x.id === ev.design)) ev.design = designs()[0].id; }
+  let added = 0; (Array.isArray(guests) ? guests : []).slice(0, 500).forEach(n => { n = str(n, 60).trim(); if (n && !S.guests.some(g => g.name.toLowerCase() === n.toLowerCase())) { S.guests.push({ id: uid(), name: n, email: '', under18: false, rsvp: '' }); added++; } });
+  const got = [ev.name && 'event', ev.host && 'host', ev.date && 'date', ev.time && 'time', ev.venue && 'venue', ev.theme && 'theme', ev.kids ? "kids' party" : 'adults'].filter(Boolean);
+  S.prefillNote = 'Filled in from My Party: ' + got.join(', ') + (S.guests.length ? ', ' + S.guests.length + ' guest' + (S.guests.length === 1 ? '' : 's') : '') + '. You can change anything here.';
+  save(); return added;
+}
+function prefillBoot() {
+  if (/^#prefill=/.test(location.hash)) { try { applyPrefill(JSON.parse(unb64u(location.hash.slice(9))), null); } catch (e) {} history.replaceState(null, '', location.pathname + location.search); }
+  if (window.parent !== window) {
+    const ok = o => (CFG.prefillFrom || []).includes(o);
+    window.addEventListener('message', e => { if (e.source !== window.parent || !ok(e.origin) || !e.data || e.data.type !== 'mp-prefill') return; applyPrefill(e.data.event, e.data.guests); render(); window.parent.postMessage({ type: 'ie-prefilled', guests: S.guests.length }, e.origin); });
+    window.parent.postMessage({ type: 'ie-ready' }, '*'); // carries no data
+  }
+}
+
 // ---------- boot ----------
 document.title = CFG.appName + ' ' + CFG.brand; $('#appName').textContent = CFG.appName; $('#appBrand').textContent = CFG.brand;
 $('#modal').onclick = e => { if (e.target.id === 'modal' || e.target.hasAttribute('data-close')) $('#modal').hidden = true; };
@@ -349,6 +374,6 @@ $('#walletBtn').onclick = openWallet;
 $$('#tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.tab; save(); render(); window.scrollTo(0, 0); });
 window.addEventListener('storage', e => { if (e.key === KEY && document.body.dataset.page !== 'coupons' && !/^#rsvp=/.test(location.hash)) { S = load(); render(); } });
 window.addEventListener('hashchange', () => location.reload());
-window.IE = { maskEmail, state: () => S, isCharged, chargeGuests, entitlement: g => entitlement(g), coupons, wallet, inviteText, rsvpLink, autoPurge, setFor, isUsed, last: null };
-if (document.body.dataset.page === 'coupons') couponView(); else if (/^#rsvp=/.test(location.hash)) guestView(); else render();
+window.IE = { applyPrefill, maskEmail, state: () => S, isCharged, chargeGuests, entitlement: g => entitlement(g), coupons, wallet, inviteText, rsvpLink, autoPurge, setFor, isUsed, last: null };
+if (document.body.dataset.page === 'coupons') couponView(); else if (/^#rsvp=/.test(location.hash)) guestView(); else { prefillBoot(); render(); }
 })();

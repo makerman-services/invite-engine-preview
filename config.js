@@ -5,6 +5,8 @@
    - art: swap any background by changing its file here (text is drawn live over it). */
 window.IE_CONFIG = {
   appName: 'Invite & Pour', brand: 'by Makerman Services',
+  // Pages allowed to embed this app and send prefill (event details + guest names, never emails) by postMessage
+  prefillFrom: ['https://makerman-services.github.io', 'http://localhost:8773'],
   myPartyUrl: 'https://makerman-services.github.io/party-planner-invites-preview/',
   deleteAfterDays: 30,
   art: {
