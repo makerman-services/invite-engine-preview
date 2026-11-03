@@ -11,7 +11,11 @@ window.IE_CONFIG = {
   deleteAfterDays: 30,
   art: {
     invites: [
-      // ai: true shows the "AI-generated art, made with Grok Imagine" label on it. kids: shown in kids' party mode. adults: false hides it there.
+      // ai: true shows the "AI-generated art, made with Grok Imagine" label on it (or its own label). kids: shown in kids' party mode. adults: false hides it there.
+      // Canva AI paid art (Legal pass /workspace/ops/legal/canva-paid-art-pass-2026-11-03.md, sources in ART-SOURCES.md): first in each list, so it is the default.
+      { id: 'navygold', name: 'Navy & gold', src: 'img/canva-adult-invite.webp', ink: '#fff', pane: 'rgba(10,14,40,.55)', ai: true, label: 'Made with Canva AI' },
+      { id: 'skyparty', name: 'Balloons & bunting', src: 'img/canva-kids-invite.webp', ink: '#1E1B2E', pane: 'rgba(255,255,255,.82)', ai: true, label: 'Made with Canva AI', kids: true, adults: false },
+      // Grok Imagine art below: preview only (Mal 17:37: Imagine stays in posts and previews; remove before sale)
       { id: 'confetti', name: 'Confetti', src: 'img/invite-confetti.jpg', ink: '#fff', pane: 'rgba(10,14,40,.55)', ai: true },
       { id: 'garden', name: 'Garden', src: 'img/invite-garden.jpg', ink: '#2E2A1F', pane: 'rgba(255,253,245,.82)', ai: true },
       { id: 'neon', name: 'Neon night', src: 'img/invite-neon.jpg', ink: '#fff', pane: 'rgba(12,6,30,.6)', ai: true },
