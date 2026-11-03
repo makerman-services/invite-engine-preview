@@ -21,8 +21,9 @@ window.IE_CONFIG = {
     // Add or swap art here; an empty list falls back to the plain colour.
     page: {
       colour: '#F7F5FB',
-      adult: [{ id: 'elegant', name: 'Party tables', src: 'img/adult-page-elegant.jpg', ai: true }],
-      kids: [{ id: 'party', name: 'Clown, magician & party table', src: 'img/kids-page-party-v2.jpg', ai: true }, { id: 'cartoon', name: 'Cartoon clown & magician', src: 'img/kids-page-clown-magician.jpg', ai: true }]
+      // Legal-passed photo-real pages (faded cream centre for the text). notice = extra line shown wherever that page is used.
+      adult: [{ id: 'elegant', name: 'Party tables (photo)', src: 'img/adult-page-elegant-faded.jpg', ai: true }, { id: 'seniors', name: 'Classic tea party (photo)', src: 'img/seniors-page-classic-faded.jpg', ai: true }],
+      kids: [{ id: 'party', name: 'Clown, magician & party table (photo)', src: 'img/kids-page-party-v2-faded.jpg', ai: true, notice: 'Illustration only. Entertainers are booked by the host.' }, { id: 'cartoon', name: 'Cartoon clown & magician', src: 'img/kids-page-clown-magician.jpg', ai: true, notice: 'Illustration only. Entertainers are booked by the host.' }]
     },
     mocktail: 'img/coupon-mocktail.jpg', cocktail: 'img/coupon-cocktail.jpg', couponAi: true
   },

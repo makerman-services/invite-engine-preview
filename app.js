@@ -137,6 +137,8 @@ function setPage(kids, id) { // full-page art from config; falls back to plain c
   bg.style.backgroundColor = P.colour || ''; bg.style.backgroundImage = src ? `url('${src}')` : 'none';
   document.querySelector('.page-fade').style.display = src ? '' : 'none';
   lab.hidden = !(src && ai); lab.textContent = 'Background: ' + C.artLabel;
+  const cap = $('#pageCap'); if (cap) { cap.hidden = !(src && ai); cap.textContent = C.artLabel + (art && art.notice ? ' · ' + art.notice : ''); }
+  const no = $('#pageArtNotice'); if (no) { no.hidden = !(src && art.notice); no.textContent = (art && art.notice) || ''; }
 }
 function render() {
   setPage(!!S.ev.kids, S.ev.pageBg);
@@ -153,7 +155,7 @@ function rEvent() {
     <label class="row"><input type="checkbox" data-evc="plusOnes" ${ev.plusOnes ? 'checked' : ''} style="width:auto"> Guests can bring plus-ones</label>
     <p class="hint">Guest details are deleted automatically ${CFG.deleteAfterDays} days after the event${deleteDate(ev) ? ' (on ' + esc(fmtD(deleteDate(ev))) + ')' : ''}.</p></section>
     <section class="card"><h2>Design</h2><div class="designs">${designs().map(a => `<button data-design="${a.id}" class="${ev.design === a.id ? 'on' : ''}" data-testid="design-${a.id}"><div class="sw" style="${a.src ? `background-image:url('${esc(a.src)}')` : `background:${a.css}`}">${a.emoji ? a.emoji.split(' ')[0] : ''}</div>${esc(a.name)}</button>`).join('')}</div>
-    <h3>Page background</h3><select id="pageBgSel" data-testid="page-bg">${pageList(ev.kids).map(p => `<option value="${p.id}" ${(pageArt(ev.kids, ev.pageBg) || {}).id === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}<option value="none" ${ev.pageBg === 'none' ? 'selected' : ''}>Plain colour</option></select>
+    <h3>Page background</h3><select id="pageBgSel" data-testid="page-bg">${pageList(ev.kids).map(p => `<option value="${p.id}" ${(pageArt(ev.kids, ev.pageBg) || {}).id === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}<option value="none" ${ev.pageBg === 'none' ? 'selected' : ''}>Plain colour</option></select>${(pageArt(ev.kids, ev.pageBg) || {}).notice ? `<p class="hint" id="pageBgNotice" data-testid="page-bg-notice">${esc(pageArt(ev.kids, ev.pageBg).notice)}</p>` : ''}
     <h3>Preview</h3>${inviteCard(vars(null), ev.design)}</section>`;
   $$('[data-ev]').forEach(i => i.onchange = () => { ev[i.dataset.ev] = i.value.trim(); save(); render(); });
   $$('[data-evc]').forEach(i => i.onchange = () => { ev[i.dataset.evc] = i.checked; if (i.dataset.evc === 'kids') { if (!designs().some(d => d.id === ev.design)) ev.design = designs()[0].id; ev.pageBg = ''; S.bar.mode = ev.kids ? 'mock2' : 'choice'; S.bar.mc = 2; S.bar.cc = 1; } save(); render(); });
