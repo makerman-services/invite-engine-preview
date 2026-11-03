@@ -48,3 +48,12 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{border-bottom:1px
 .page-cap{position:fixed;left:0;right:0;bottom:0;z-index:2;pointer-events:none;text-align:center;font-size:11.5px;line-height:1.3;padding:4px 8px;background:rgba(255,255,255,.94);color:#3F3A4F}
 .page-cap[hidden]{display:none}
 body{padding-bottom:26px}
+
+/* QR + coupon page */
+.qrbox{text-align:center;border:1px solid #E4E0EE;border-radius:14px;padding:12px;margin-top:12px;background:#fff}
+.qr img{width:240px;height:240px;max-width:100%;image-rendering:pixelated;background:#fff}
+.cwrap{margin:12px 0}.cwrap.used .cpn{filter:grayscale(1);opacity:.55}
+.cid{justify-content:space-between;align-items:center;margin-top:6px}
+.usedtag{display:inline-block;background:#3F3A4F;color:#fff;border-radius:8px;padding:4px 10px;letter-spacing:.08em}
+.err{color:#B3261E;font-weight:600;font-size:13px;margin:4px 0}
+.err[hidden]{display:none}

@@ -1,10 +1,10 @@
 /* Invitation engine config. PREVIEW build.
    - appName: working name, change in ONE place.
-   - googleClientId: empty = Google sign-in not connected. Sending is HARD-DISABLED in app.js (PREVIEW_NO_SEND) whatever this says.
+   - No Gmail sign-in in this build ("Email sending coming soon"): hosts copy or share invite links. No OAuth code ships.
    - Payments are STUBBED: no Stripe call exists in this build.
    - art: swap any background by changing its file here (text is drawn live over it). */
 window.IE_CONFIG = {
-  appName: 'Invite & Pour', brand: 'by Makerman Services', googleClientId: '',
+  appName: 'Invite & Pour', brand: 'by Makerman Services',
   myPartyUrl: 'https://makerman-services.github.io/party-planner-invites-preview/',
   deleteAfterDays: 30,
   art: {

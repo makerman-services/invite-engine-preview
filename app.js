@@ -1,10 +1,10 @@
 /* Invite & Pour (working name): invitations from the host's own Gmail, RSVP links, bar drink coupons, Robot Crew-style tokens.
-   PREVIEW BUILD: never sends email (PREVIEW_NO_SEND), never charges (no payment code at all), no AI calls. No backend. (c) Makerman Services. */
+   PREVIEW BUILD: never sends email (no Gmail sign-in at all: hosts copy or share invite links), never charges (no payment code at all),
+   no AI calls, no backend. Coupons are created only when a guest RSVPs yes, and open from a QR code (generated in the browser). (c) Makerman Services. */
 (function () {
 'use strict';
-const PREVIEW_NO_SEND = true;
-const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.send'; // the ONLY scope requested
-const KEY = 'invitePour.v1', WKEY = 'invitePour.wallet.v1';
+const PREVIEW_NO_SEND = true; // email sending is "coming soon": no Gmail sign-in, no send code in this build
+const KEY = 'invitePour.v1', WKEY = 'invitePour.wallet.v1', UKEY = 'invitePour.used.v1';
 const CFG = window.IE_CONFIG, C = window.IE_COPY, T = CFG.tokens;
 const ALPH = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
@@ -28,7 +28,7 @@ function deleteDate(ev) { if (!ev.date) return null; const d = new Date(ev.date 
 const fmtD = d => d ? d.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '';
 const fmtTime = t => { if (!t) return ''; const [h, m] = t.split(':').map(Number); return ((h % 12) || 12) + (m ? ':' + String(m).padStart(2, '0') : '') + (h < 12 ? 'am' : 'pm'); };
 // Legal: delete guest data automatically after the event (deleteAfterDays after the event date)
-function autoPurge() { const d = deleteDate(S.ev); if (d && Date.now() >= d.getTime() && S.guests.length) { S.guests = []; save(); return true; } return false; }
+function autoPurge() { const d = deleteDate(S.ev); if (d && Date.now() >= d.getTime() && S.guests.length) { S.guests = []; const u = usedAll(); Object.keys(u).forEach(k => { if (k.startsWith(S.ev.id + ':')) delete u[k]; }); localStorage.setItem(UKEY, JSON.stringify(u)); save(); return true; } return false; }
 
 // ---------- coupons: exactly ONE set per guest, unique codes, under-18 = mocktails only ----------
 function entitlement(g) {
@@ -41,22 +41,36 @@ function entitlement(g) {
   return { m, c, choice };
 }
 const clamp = n => Math.max(0, Math.min(10, Math.round(+n || 0)));
-function ensureCodes() { // one set code + one RSVP token per guest, generated once, never duplicated
-  const sets = new Set(), toks = new Set();
-  S.guests.forEach(g => { if (g.set && !sets.has(g.set)) sets.add(g.set); else delete g.set; if (g.token && !toks.has(g.token)) toks.add(g.token); else delete g.token; });
+function h53(str) { let h1 = 0xdeadbeef, h2 = 0x41c6ce57; for (let i = 0; i < str.length; i++) { const ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); } h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909); h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909); return 4294967296 * (2097151 & h2) + (h1 >>> 0); }
+// The coupon set ID for one guest at one event. PREVIEW ONLY: derived from the event ID + the guest's secret RSVP token so the
+// host's Bar check and the guest's QR page agree without a server. The real app creates random IDs on the server (see SERVER.md).
+function setFor(eid, tok, em) { let n = h53('set:' + eid + ':' + tok + ':' + String(em || '').trim().toLowerCase()), s = ''; for (let i = 0; i < 8; i++) { s += ALPH[n % 32]; n = Math.floor(n / 32); } return s.slice(0, 4) + '-' + s.slice(4); }
+function ensureCodes() { // one RSVP token per guest; the coupon set exists ONLY once the guest has RSVPed yes
+  const toks = new Set();
+  S.guests.forEach(g => { if (g.token && !toks.has(g.token)) toks.add(g.token); else delete g.token; });
   S.guests.forEach(g => {
-    if (!g.set) { let c; do { c = code(4) + '-' + code(4); } while (sets.has(c)); sets.add(c); g.set = c; g.redeemed = []; }
     if (!g.token) { let t; do { t = code(12); } while (toks.has(t)); toks.add(t); g.token = t; }
+    if (g.rsvp === 'yes' && g.rsvpEmail) g.set = setFor(S.ev.id, g.token, g.rsvpEmail); else delete g.set;
     g.redeemed = g.redeemed || [];
   });
 }
-function coupons(g) { // the individual one-use coupons in this guest's single set
-  const e = entitlement(g), out = [];
-  for (let i = 1; i <= e.m; i++) out.push({ kind: 'mocktail', code: g.set + '-M' + i });
-  if (!S.ev.kids && !g.under18 && S.ev.alcohol) for (let i = 1; i <= e.c; i++) out.push({ kind: 'cocktail', code: g.set + '-C' + i }); // belt and braces
-  return { e, list: out };
+// Pure generator: the one-use coupons in one set. Cocktails only for an adult guest at an adults' event with alcohol (belt and braces).
+function couponsFor(set, e, adultOk) { const out = []; if (!set) return out; for (let i = 1; i <= e.m; i++) out.push({ kind: 'mocktail', code: set + '-M' + i }); if (adultOk) for (let i = 1; i <= e.c; i++) out.push({ kind: 'cocktail', code: set + '-C' + i }); return out; }
+function coupons(g) { // NONE until this guest RSVPs yes
+  const e = entitlement(g);
+  return { e, list: g.rsvp === 'yes' ? couponsFor(g.set || setFor(S.ev.id, g.token || '', g.rsvpEmail || ''), e, !S.ev.kids && !g.under18 && S.ev.alcohol) : [] };
 }
-function couponText(g, cp) { return fillT(S.ev.kids ? C.kids.mocktail : C.coupon[cp.kind], { event_name: S.ev.kids ? (S.ev.name || (S.ev.child || 'our birthday star') + "'s party") : (S.ev.name || 'our party'), guest_name: g.name, code: cp.code, host_name: S.ev.host || 'your host' }); }
+const hasCoupons = e => e.m + e.c > 0;
+// 'used' is remembered on THIS device only (localStorage). The real app checks each coupon once on the server.
+// Partly masked email for coupons and the bar: first 2 letters, then •••, then the domain (jo•••@gmail.com). Only the host's list shows it in full.
+function maskEmail(e) { e = String(e || '').trim(); const i = e.lastIndexOf('@'); if (i < 1) return ''; const L = e.slice(0, i); return L.slice(0, L.length > 2 ? 2 : 1) + '•••' + e.slice(i); }
+// 30-day auto-delete for this device's 'used' records too: each record carries the event's delete date
+const usedAll = () => { let u; try { u = JSON.parse(localStorage.getItem(UKEY)) || {}; } catch (e) { u = {}; } let ch = false; Object.keys(u).forEach(k => { const r = u[k]; if (r && r.del && Date.now() >= r.del) { delete u[k]; ch = true; } }); if (ch) localStorage.setItem(UKEY, JSON.stringify(u)); return u; };
+const isUsed = (eid, c) => !!usedAll()[eid + ':' + c];
+function markUsed(eid, c, del) { const u = usedAll(), k = eid + ':' + c; if (u[k]) return false; u[k] = { at: Date.now(), del: del || null }; localStorage.setItem(UKEY, JSON.stringify(u)); return true; }
+const couponEvent = () => S.ev.kids ? (S.ev.name || (S.ev.child || 'our birthday star') + "'s party") : (S.ev.name || 'our party');
+function couponTextFrom(kids, kind, v) { return fillT(kids ? C.kids.mocktail : C.coupon[kind], v); }
+function couponText(g, cp) { return couponTextFrom(S.ev.kids, cp.kind, { event_name: couponEvent(), guest_name: g.name, code: cp.code, host_name: S.ev.host || 'your host' }); }
 function describe(e) { if (e.choice) return '2 mocktails or 1 cocktail'; const a = []; if (e.m) a.push(e.m + ' mocktail' + (e.m === 1 ? '' : 's')); if (e.c) a.push(e.c + ' cocktail' + (e.c === 1 ? '' : 's') + ' (18+)'); return a.join(' + ') || 'no drink coupons'; }
 
 // ---------- tokens: Robot Crew model (total balance + paid part; free spent first; bought kept separately) ----------
@@ -73,7 +87,7 @@ function chargeGuests(list) { // all or nothing
   if (w.balance < n) return { ok: false, n };
   const free = w.balance - w.paid, fromFree = Math.min(free, n); w.balance -= n; w.paid -= (n - fromFree);
   todo.forEach(g => w.charged[chargeKey(g)] = Date.now());
-  w.ledger.unshift({ at: Date.now(), kind: 'spend', amount: -n, note: todo.length + ' new guest invite' + (todo.length === 1 ? '' : 's') + (PREVIEW_NO_SEND ? ' (preview, not sent)' : '') + (fromFree ? ' (' + fromFree + ' free)' : '') });
+  w.ledger.unshift({ at: Date.now(), kind: 'spend', amount: -n, note: todo.length + ' new guest invite link' + (todo.length === 1 ? '' : 's') + (PREVIEW_NO_SEND ? ' (preview)' : '') + (fromFree ? ' (' + fromFree + ' free)' : '') });
   setWallet(w); return { ok: true, n };
 }
 const aud = c => 'A$' + (c / 100).toFixed(2) + ' (AUD)';
@@ -88,41 +102,28 @@ function openWallet() {
   $$('[data-pack]').forEach(b => b.onclick = () => { buyStub(T.packs.find(p => p.id === b.dataset.pack)); openWallet(); toast('Test tokens added. Nothing charged.'); });
 }
 
-// ---------- Google sign-in: gmail.send only, token in memory for this session only, revoked after use ----------
-let gToken = null; // never written to localStorage/sessionStorage/cookies
-function signIn() {
-  return new Promise(res => {
-    if (!CFG.googleClientId) return res({ ok: false, why: 'Preview: Google sign-in isn\'t connected, so nothing can be sent. You can still build and check every invite.' });
-    const go = () => window.google.accounts.oauth2.initTokenClient({ client_id: CFG.googleClientId, scope: GMAIL_SCOPE, callback: r => { if (r && r.access_token) { gToken = r.access_token; res({ ok: true }); } else res({ ok: false, why: 'Google sign-in was cancelled.' }); } }).requestAccessToken();
-    if (window.google && window.google.accounts) return go();
-    const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.onload = go; s.onerror = () => res({ ok: false, why: 'Couldn\'t reach Google sign-in.' }); document.head.appendChild(s);
-  });
-}
-function discardToken() { if (gToken && window.google && window.google.accounts) try { window.google.accounts.oauth2.revoke(gToken, () => {}); } catch (e) {} gToken = null; }
-window.addEventListener('pagehide', discardToken);
-async function gmailSend(raw) {
-  if (PREVIEW_NO_SEND || !gToken) return { sent: false };
-  const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', { method: 'POST', headers: { Authorization: 'Bearer ' + gToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ raw: b64u(raw) }) });
-  return { sent: r.ok };
-}
+// ---------- no Gmail sign-in in this build: "Email sending coming soon" (hosts copy or share links) ----------
 
 // ---------- links + email ----------
 function vars(g) { const ev = S.ev; return { kids: !!ev.kids, event_name: ev.name || 'our party', host_name: ev.host || 'your host', guest_name: g ? g.name : '', date: ev.date ? fmtD(new Date(ev.date + 'T00:00:00')) : 'Date to be confirmed', time: fmtTime(ev.time), venue: ev.venue || 'Venue to be confirmed', host_note: ev.note || '', rsvp_deadline: ev.rsvpBy ? fmtD(new Date(ev.rsvpBy + 'T00:00:00')) : 'soon', delete_date: fmtD(deleteDate(ev)) || '30 days after the event', child_name: ev.child || 'our birthday star', age: ev.age || '', start_time: fmtTime(ev.time), end_time: fmtTime(ev.endTime) || 'late', drop_off_note: ev.dropOff || '' }; }
-function payload(g) { const cp = coupons(g); cp.list.forEach(c => c.txt = couponText(g, c)); return { v: 1, t: g.token, gid: g.id, ...vars(g), he: S.ev.hostEmail, d: S.ev.design, pb: S.ev.pageBg, k: S.ev.kids ? 1 : 0, po: S.ev.plusOnes ? 1 : 0, ch: cp.e.choice ? 1 : 0, cp: cp.list }; }
-const base = () => location.origin + location.pathname;
+function payload(g) { const e = entitlement(g); return { v: 2, t: g.token, gid: g.id, eid: S.ev.id, ...vars(g), he: S.ev.hostEmail, d: S.ev.design, pb: S.ev.pageBg, k: S.ev.kids ? 1 : 0, po: S.ev.plusOnes ? 1 : 0, u18: g.under18 ? 1 : 0, alc: S.ev.alcohol ? 1 : 0, ch: e.choice ? 1 : 0, m: e.m, c: e.c, cen: couponEvent(), del: deleteDate(S.ev) ? deleteDate(S.ev).getTime() : 0 }; } // entitlement only: NO coupons in the invite
+const base = () => location.origin + location.pathname.replace(/coupon\.html$/, '');
+const dir = () => location.origin + location.pathname.replace(/[^/]*$/, '');
 const rsvpLink = g => base() + '#rsvp=' + b64u(JSON.stringify(payload(g)));
-function emailHtml(g) {
-  const v = Object.assign(vars(g), { rsvp_link: rsvpLink(g) }), cp = coupons(g), has = cp.list.length > 0;
-  const L0 = S.ev.kids ? C.kids.lines.slice() : C.email.lines.slice();
-  const lines = L0.filter(l => !(l.startsWith('@coupon:') && !has)).filter(l => !(l === '{host_note}' && !v.host_note)).map(l => l.replace(/^@coupon:/, ''));
-  let html = lines.map(l => { const t = esc(fillT(l, v)); return t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, a, h) => `<a href="${h}">${a}</a>`); }).join('<br>\n').replace(/ (<br>|$)/g, '$1');
-  if (has) { const anchor = esc(fillT(S.ev.kids ? 'Let us know about any allergies or dietary needs.' : 'Drinks are offered by {host_name}, not Makerman Services.', v)), i = html.indexOf(anchor); const block = (cp.e.choice && !S.ev.kids ? '<br>\n' + esc(C.coupon.choiceLine) : '') + cp.list.map(c => '<br>\n' + esc(couponText(g, c))).join('') + (S.ev.kids ? '<br>\n' + esc(fillT(C.kids.ingredients, v)) : '') + '<br>\n<small>' + esc(C.coupon.smallPrint) + '</small>'; if (i >= 0) { const end = i + anchor.length; html = html.slice(0, end) + block + html.slice(end); } }
-  return html;
+// The text a host copies or shares (from the Legal email copy). No coupons in it: they're created on RSVP yes.
+function inviteText(g) {
+  const v = Object.assign(vars(g), { rsvp_link: rsvpLink(g) }), has = hasCoupons(entitlement(g));
+  const L0 = (S.ev.kids ? C.kids.lines : C.email.lines).slice();
+  const out = [];
+  L0.forEach(l => {
+    if (l === '{host_note}' && !v.host_note) return;
+    if (l.startsWith('@coupon:')) { if (has && !/included below/.test(l)) out.push(l.slice(8)); return; } // "included below" no longer true: coupons come after RSVP yes
+    out.push(l);
+    if (has && /\{rsvp_link\}/.test(l)) out.push(S.ev.kids ? C.ui.kidsCouponAfterYes : C.ui.couponAfterYes);
+  });
+  return out.map(l => fillT(l, v).replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1: $2').replace(/\s+$/, '')).join('\n');
 }
-function mime(g) {
-  const enc = s => '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(s))) + '?=';
-  return ['From: ' + enc(S.ev.host || 'Host') + ' <' + (S.ev.hostEmail || 'me') + '>', 'To: ' + g.email, 'Subject: ' + enc(fillT(S.ev.kids ? C.kids.subject : C.email.subject, vars(g))), 'MIME-Version: 1.0', 'Content-Type: text/html; charset="UTF-8"', '', emailHtml(g)].join('\r\n');
-}
+const shareTitle = g => fillT(S.ev.kids ? C.kids.subject : C.email.subject, vars(g));
 
 // ---------- invite + coupon visuals (text drawn live over the art) ----------
 const art = id => CFG.art.invites.find(a => a.id === id) || CFG.art.invites[0];
@@ -149,7 +150,7 @@ function render() {
 }
 function rEvent() {
   const ev = S.ev, f = (k, l, t = 'text', x = '') => `<label>${l}<input data-ev="${k}" type="${t}" value="${esc(ev[k])}" ${x} data-testid="ev-${k}"></label>`;
-  $('#app').innerHTML = `<section class="card"><h2>Your event</h2>${f('name', 'Event name', 'text', 'maxlength="80"')}<div class="grid2">${f('host', 'Your name (host)', 'text', 'maxlength="60"')}${f('hostEmail', 'Your Gmail address', 'email', 'maxlength="120"')}${f('date', 'Date', 'date')}${f('time', 'Start time', 'time')}${f('rsvpBy', 'RSVP by', 'date')}${f('venue', 'Venue', 'text', 'maxlength="120"')}</div>
+  $('#app').innerHTML = `<section class="card"><h2>Your event</h2>${f('name', 'Event name', 'text', 'maxlength="80"')}<div class="grid2">${f('host', 'Your name (host)', 'text', 'maxlength="60"')}${f('hostEmail', 'Your email (optional, for RSVP replies)', 'email', 'maxlength="120"')}${f('date', 'Date', 'date')}${f('time', 'Start time', 'time')}${f('rsvpBy', 'RSVP by', 'date')}${f('venue', 'Venue', 'text', 'maxlength="120"')}</div>
     <label>Note for guests (optional)<textarea data-ev="note" maxlength="240" data-testid="ev-note">${esc(ev.note)}</textarea></label>
     <label class="row"><input type="checkbox" data-evc="kids" ${ev.kids ? 'checked' : ''} style="width:auto" data-testid="kids-mode"> Kids' party</label>${ev.kids ? `<p class="note" data-testid="kids-note">${esc(C.kids.hostNote)}</p><div class="grid2">${f('child', "Birthday child's first name", 'text', 'maxlength="40"')}${f('age', 'Turning (age)', 'number', 'min="1" max="17"')}${f('endTime', 'Finish time', 'time')}${f('dropOff', 'Drop-off note (optional)', 'text', 'maxlength="120"')}</div>` : ''}
     <label class="row"><input type="checkbox" data-evc="plusOnes" ${ev.plusOnes ? 'checked' : ''} style="width:auto"> Guests can bring plus-ones</label>
@@ -162,31 +163,32 @@ function rEvent() {
   $('#pageBgSel').onchange = e => { ev.pageBg = e.target.value; save(); render(); };
   $$('[data-design]').forEach(b => b.onclick = () => { ev.design = b.dataset.design; save(); render(); });
 }
+function track(x, cp) { const em = x.rsvpEmail || x.email, used = cp.list.filter(c => isUsed(S.ev.id, c.code)).length; return `<br><small data-testid="track-${x.id}">${em ? esc(em) : 'No email yet'} · RSVP: ${esc(x.rsvp || 'not yet')} · Coupons issued: <b data-testid="issued-${x.id}">${cp.list.length}</b> · Used: <b data-testid="used-${x.id}">${used}</b></small>`; }
+function couponStatus(x, cp) { const d = esc(describe(cp.e)); if (!hasCoupons(cp.e)) return 'No drink coupons'; return x.rsvp === 'yes' ? `Coupon set ${esc(x.set)}: ${d} (created on RSVP yes)` : `Coupons: ${d}, created when they RSVP yes`; }
 function designs() { return CFG.art.invites.filter(a => S.ev.kids ? a.kids : a.adults !== false); }
 function rGuests() {
   const g = S.guests;
   let h = `<section class="card"><h2>Guests <small class="hint">${g.length}</small></h2><p class="hint">One line per guest: Name, email</p><textarea id="gAdd" data-testid="g-add" placeholder="Sam Lee, sam@example.com"></textarea><div class="row mt"><button class="btn small" id="gAddBtn" data-testid="g-add-btn">Add guests</button></div>
-    <p class="hint">${esc(C.ui.gmail)}</p>`;
+    <p class="hint">Email is optional. You'll copy or share each guest's invite link in step 4.</p>`;
   h += g.map(x => { const cp = coupons(x); return `<div class="g" data-testid="g-${x.id}"><div class="top2"><b>${esc(x.name)}</b><small data-testid="rsvp-${x.id}">RSVP: ${esc(x.rsvp || 'not sent')}${x.plus ? ' +' + x.plus : ''}</small></div>
     <input type="email" data-email="${x.id}" value="${esc(x.email || '')}" placeholder="Guest email" maxlength="120" data-testid="email-${x.id}">
-    ${S.ev.kids ? `<small>Adults staying: ${+x.adultsStaying || 0}</small><br><small data-testid="set-${x.id}">Coupon set ${esc(x.set)}: ${esc(describe(cp.e))}</small>` : `<label class="row"><input type="checkbox" data-u18="${x.id}" ${x.under18 ? 'checked' : ''} style="width:auto" data-testid="u18-${x.id}"> ${esc(C.under18Toggle)}</label>
-    <small data-testid="set-${x.id}">Coupon set ${esc(x.set)}: ${esc(describe(cp.e))}</small>`}${x.diet ? `<br><small>Dietary: ${esc(x.diet)}</small>` : ''}${x.allergy ? `<br><small data-testid="allergy-${x.id}">⚠ Allergies (host only): ${esc(x.allergy)}</small>` : ''}${x.msg ? `<br><small>Message: ${esc(x.msg)}</small>` : ''}
-    <div class="row mt"><button class="btn small alt" data-link="${x.id}">🔗 Copy RSVP link</button><a class="linkb" href="${esc(rsvpLink(x))}" target="_blank" rel="noopener" data-testid="open-${x.id}">open</a><button class="linkb" data-del="${x.id}">remove</button></div></div>`; }).join('');
-  h += `<h3>RSVP replies by email</h3><p class="hint">Paste replies that contain a line like RSVP:XXXXXXXXXXXX:yes</p><div class="row"><input id="rPaste" data-testid="r-paste"><button class="btn small alt" id="rApply" data-testid="r-apply">Update</button></div>`;
+    ${S.ev.kids ? `<small>Adults staying: ${+x.adultsStaying || 0}</small><br><small data-testid="set-${x.id}">${couponStatus(x, cp)}</small>${track(x, cp)}` : `<label class="row"><input type="checkbox" data-u18="${x.id}" ${x.under18 ? 'checked' : ''} style="width:auto" data-testid="u18-${x.id}"> ${esc(C.under18Toggle)}</label>
+    <small data-testid="set-${x.id}">${couponStatus(x, cp)}</small>${track(x, cp)}`}${x.diet ? `<br><small>Dietary: ${esc(x.diet)}</small>` : ''}${x.allergy ? `<br><small data-testid="allergy-${x.id}">⚠ Allergies (host only): ${esc(x.allergy)}</small>` : ''}${x.msg ? `<br><small>Message: ${esc(x.msg)}</small>` : ''}
+    <div class="row mt"><a class="linkb" href="${esc(rsvpLink(x))}" target="_blank" rel="noopener" data-testid="open-${x.id}">preview their invite</a><button class="linkb" data-del="${x.id}">remove</button></div></div>`; }).join('');
+  h += `<h3>RSVP replies by email</h3><p class="hint">Paste replies that contain a line like RSVP:XXXXXXXXXXXX:yes:guest@example.com</p><div class="row"><input id="rPaste" data-testid="r-paste"><button class="btn small alt" id="rApply" data-testid="r-apply">Update</button></div>`;
   h += g.length ? `<div class="row mt"><button class="btn small alt" id="delAll" data-testid="del-all">Delete all guest data now</button></div>` : '';
   $('#app').innerHTML = h + '</section>';
   $('#gAddBtn').onclick = () => { $('#gAdd').value.split('\n').map(l => l.trim()).filter(Boolean).forEach(l => { const [n, e] = l.split(/\s*[,;\t]\s*/); if (e && g.some(x => (x.email || '').toLowerCase() === e.trim().toLowerCase())) return toast('Already on the list: ' + e); if (n) g.push({ id: uid(), name: n.slice(0, 60), email: validEmail(e) ? e.trim() : '', under18: false, rsvp: '' }); }); save(); render(); };
   $$('[data-email]').forEach(i => i.onchange = () => { g.find(x => x.id === i.dataset.email).email = i.value.trim(); save(); });
   $$('[data-u18]').forEach(i => i.onchange = () => { g.find(x => x.id === i.dataset.u18).under18 = i.checked; save(); render(); });
-  $$('[data-link]').forEach(b => b.onclick = () => copyTxt(rsvpLink(g.find(x => x.id === b.dataset.link))));
   $$('[data-del]').forEach(b => b.onclick = () => { if (!confirm('Remove this guest and their details?')) return; S.guests = g.filter(x => x.id !== b.dataset.del); save(); render(); });
-  $('#rApply').onclick = () => { let n = 0; $('#rPaste').value.replace(/RSVP:([A-Z2-9]{12}):(yes|no|maybe)/gi, (m, t, k) => { const x = g.find(y => y.token === t.toUpperCase()); if (x) { x.rsvp = k.toLowerCase(); n++; } }); save(); render(); toast(n ? 'Updated ' + n : 'No RSVP lines found'); };
+  $('#rApply').onclick = () => { let n = 0; $('#rPaste').value.replace(/RSVP:([A-Z2-9]{12}):(yes|no|maybe)(?::([^\s:]+@[^\s:]+))?/gi, (m, t, k, em) => { const x = g.find(y => y.token === t.toUpperCase()); if (x && !(k.toLowerCase() === 'yes' && !validEmail(em))) { x.rsvp = k.toLowerCase(); if (validEmail(em)) { x.rsvpEmail = em.trim(); if (!x.email) x.email = x.rsvpEmail; } n++; } }); save(); render(); toast(n ? 'Updated ' + n : 'No RSVP lines found'); };
   const da = $('#delAll'); if (da) da.onclick = () => { if (!confirm('Delete every guest\'s details from this device?')) return; S.guests = []; save(); render(); };
 }
 function rDrinks() {
   const b = S.bar, alc = S.ev.alcohol, modes = S.ev.kids ? [['mock2', '2 mocktails'], ['custom', 'Custom'], ['none', 'None']] : [['mock2', '2 mocktails'], ['cock1', '1 cocktail'], ['choice', '2 mocktails or 1 cocktail'], ['custom', 'Custom'], ['none', 'None']];
-  const sample = { name: 'Sample guest', set: 'ABCD-EFGH', under18: false }, s18 = Object.assign({}, sample, { under18: true });
-  $('#app').innerHTML = `<section class="card"><h2>${S.ev.kids ? 'Mocktail coupons' : 'Bar drink coupons'}</h2><p class="hint">Each guest gets exactly one coupon set. Change the mix any time: codes stay the same.</p>
+  const sample = { name: 'Sample guest', set: 'ABCD-EFGH', token: '', rsvp: 'yes', under18: false }, s18 = Object.assign({}, sample, { under18: true });
+  $('#app').innerHTML = `<section class="card"><h2>${S.ev.kids ? 'Mocktail coupons' : 'Bar drink coupons'}</h2><p class="hint">Each guest gets exactly one coupon set, created when they RSVP yes. Change the mix any time: codes stay the same.</p>
     ${S.ev.kids ? `<p class="note" data-testid="kids-drinks">${esc(C.kids.hostNote)}</p>` : `<label class="row"><input type="checkbox" id="alc" ${alc ? 'checked' : ''} style="width:auto" data-testid="alc"> Alcohol is served at this event</label>`}
     ${alc ? `<p class="note warm" data-testid="host-resp">${esc(C.hostResponsibility)}</p>` : ''}
     <label>Coupons per guest<select id="mode" data-testid="mode">${modes.map(([k, l]) => `<option value="${k}" ${b.mode === k ? 'selected' : ''} ${!alc && ['cock1', 'choice'].includes(k) ? 'disabled' : ''}>${l}</option>`).join('')}</select></label>
@@ -204,37 +206,50 @@ const _ent = entitlement; entitlement = function (g) { if (S.bar.mode === 'none'
   const e = _ent(g); if (S.ev.kids || g.under18) { e.c = 0; e.choice = false; } return e; }; // eslint-disable-line no-func-assign
 
 function rSend() {
-  const ready = S.guests.filter(x => validEmail(x.email)), fresh = ready.filter(x => !isCharged(x)), cost = fresh.length * T.perInvite;
-  $('#app').innerHTML = `<section class="card"><h2>Send invites</h2><p class="hint">${esc(C.ui.gmail)}</p>
-    <div class="row"><button class="btn small alt" id="gIn" data-testid="g-signin">Sign in with Google</button><span class="hint" id="gState" data-testid="g-state">${gToken ? 'Signed in for this session' : 'Not signed in'}</span></div>
-    <p data-testid="batch">${ready.length} of ${S.guests.length} guests have an email. ${fresh.length} new, ${ready.length - fresh.length} already paid (resends are free). This send uses <b data-testid="cost">${cost}</b> token${cost === 1 ? '' : 's'} (1 token per guest, ${aud(T.unitCents)} each; you have ${wallet().balance}).</p>
-    <div class="row"><button class="btn" id="sendAll" data-testid="send-all" ${ready.length ? '' : 'disabled'}>✉ Send ${ready.length} invite${ready.length === 1 ? '' : 's'}</button><button class="btn small alt" id="wal">Tokens</button></div>
-    <div id="sendOut" data-testid="send-out"></div></section>`;
-  $('#gIn').onclick = async () => { const r = await signIn(); $('#gState').textContent = r.ok ? 'Signed in for this session' : r.why; };
+  const all = S.guests, fresh = all.filter(x => !isCharged(x)), cost = fresh.length * T.perInvite, paid = all.filter(isCharged);
+  $('#app').innerHTML = `<section class="card"><h2>Send invites</h2>
+    <div class="note" data-testid="email-soon"><b>${esc(C.ui.emailSoonHead)}</b> ${esc(C.ui.emailSoon)}</div>
+    <p data-testid="batch">${all.length} guest${all.length === 1 ? '' : 's'}. ${fresh.length} new, ${all.length - fresh.length} already paid (copying or sharing again is free). Getting links uses <b data-testid="cost">${cost}</b> token${cost === 1 ? '' : 's'} (1 token per guest, ${aud(T.unitCents)} each; you have ${wallet().balance}).</p>
+    <div class="row"><button class="btn" id="prep" data-testid="prep-links" ${all.length ? '' : 'disabled'}>🔗 Get ${all.length} invite link${all.length === 1 ? '' : 's'}</button><button class="btn small alt" id="wal">Tokens</button></div>
+    <div id="sendOut" data-testid="send-out"></div>
+    ${paid.length ? `<h3>Invite links</h3>${paid.map(g => `<div class="g" data-testid="inv-${g.id}"><div class="top2"><b>${esc(g.name)}</b><small>RSVP: ${esc(g.rsvp || 'waiting')}</small></div>
+      <input readonly value="${esc(rsvpLink(g))}" data-testid="link-${g.id}" aria-label="Invite link for ${esc(g.name)}" onclick="this.select()">
+      <div class="row mt"><button class="btn small" data-copy="${g.id}" data-testid="copy-${g.id}">📋 Copy invite link</button><button class="btn small alt" data-share="${g.id}" data-testid="share-${g.id}">📤 Share</button></div></div>`).join('')}` : ''}</section>`;
   $('#wal').onclick = openWallet;
-  $('#sendAll').onclick = async () => {
-    if (!ready.length) return;
-    if (!chargeGuests(ready).ok) { $('#sendOut').innerHTML = `<p class="note warm" data-testid="no-tokens">You need ${cost} tokens for this batch. Open Tokens to add a test pack.</p>`; return; }
-    const res = []; for (const g of ready) { const raw = mime(g); const r = await gmailSend(raw); g.rsvp = g.rsvp || 'invited'; g.sentAt = Date.now(); res.push({ g, raw, r }); }
-    discardToken(); save();
-    $('#sendOut').innerHTML = `<div class="note warm" data-testid="preview-not-sent"><b>${esc(C.ui.preview)}</b> ${res.length} built, ${res.filter(x => x.r.sent).length} sent. ${cost} preview token${cost === 1 ? '' : 's'} used.</div>` + res.slice(0, 3).map(x => `<details><summary>${esc(x.g.name)}: what would be sent</summary><pre data-testid="mime-${x.g.id}">${esc(x.raw)}</pre></details>`).join('');
+  $('#prep').onclick = () => {
+    if (!all.length) return;
+    if (!chargeGuests(all).ok) { $('#sendOut').innerHTML = `<p class="note warm" data-testid="no-tokens">You need ${cost} tokens for these links. Open Tokens to add a test pack.</p>`; return; }
+    all.forEach(g => { g.rsvp = g.rsvp || 'invited'; g.linkAt = g.linkAt || Date.now(); }); save(); rSend();
+    $('#sendOut').innerHTML = `<div class="note warm" data-testid="links-ready">${all.length} invite link${all.length === 1 ? '' : 's'} ready. ${cost} preview token${cost === 1 ? '' : 's'} used. Nothing was sent: copy or share each link below.</div>`;
     $('#tokBal').textContent = wallet().balance;
   };
+  $$('[data-copy]').forEach(b => b.onclick = () => { const g = S.guests.find(x => x.id === b.dataset.copy); IE.last = { how: 'copy', url: rsvpLink(g) }; copyTxt(rsvpLink(g)); });
+  $$('[data-share]').forEach(b => b.onclick = async () => {
+    const g = S.guests.find(x => x.id === b.dataset.share), url = rsvpLink(g), data = { title: shareTitle(g), text: inviteText(g), url };
+    if (navigator.share) { try { await navigator.share(data); IE.last = { how: 'share', url }; toast('Shared'); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+    IE.last = { how: 'copy', url, fallback: true }; copyTxt(inviteText(g)); toast("Sharing isn't available here, so the invite was copied");
+  });
 }
 function rBar() {
-  $('#app').innerHTML = `<section class="card"><h2>Bar check</h2><p class="hint">Type or scan a coupon code. Each coupon works once.</p><div class="row"><input id="bc" placeholder="ABCD-EFGH-M1" data-testid="bc"><button class="btn small" id="bcBtn" data-testid="bc-btn">Check and use</button></div><p id="bcOut" data-testid="bc-out"></p>
-    <table><tr><th>Guest</th><th>Set</th><th>Coupons</th><th>Used</th></tr>${S.guests.map(g => { const c = coupons(g); return `<tr><td>${esc(g.name)}${g.under18 ? ' (under 18)' : ''}</td><td>${esc(g.set)}</td><td>${esc(describe(c.e))}</td><td>${g.redeemed.length}</td></tr>`; }).join('')}</table></section>`;
+  $('#app').innerHTML = `<section class="card"><h2>Bar check</h2><p class="hint">Scan the guest's QR code with any phone camera, or type a coupon code here. Each coupon works once.</p>
+    <p class="note warm" data-testid="single-use-note">${esc(C.ui.singleUse)}</p><div class="row"><input id="bc" placeholder="ABCD-EFGH-M1" data-testid="bc"><button class="btn small" id="bcBtn" data-testid="bc-btn">Check and use</button></div><p id="bcOut" data-testid="bc-out"></p>
+    <table><tr><th>Guest</th><th>RSVP</th><th>Coupons</th><th>Used</th></tr>${S.guests.map(g => { const c = coupons(g); return `<tr><td>${esc(g.name)}${g.under18 ? ' (under 18)' : ''}${g.rsvpEmail ? `<br><small data-testid="bar-em-${g.id}">${esc(maskEmail(g.rsvpEmail))}</small>` : ''}</td><td>${esc(g.rsvp || '-')}</td><td>${g.rsvp === 'yes' ? esc(g.set) + ': ' + esc(describe(c.e)) : 'none yet'}</td><td>${c.list.filter(x => isUsed(S.ev.id, x.code)).length}</td></tr>`; }).join('')}</table></section>`;
   $('#bcBtn').onclick = () => {
-    const v = $('#bc').value.trim().toUpperCase(), g = S.guests.find(x => v.startsWith(x.set + '-')), o = $('#bcOut');
+    const v = $('#bc').value.trim().toUpperCase(), o = $('#bcOut');
+    const g = S.guests.find(x => x.rsvp === 'yes' && v.startsWith(x.set + '-')), pending = !g && S.guests.find(x => x.rsvp !== 'yes' && x.token && (v.startsWith(setFor(S.ev.id, x.token) + '-') || (x.rsvpEmail && v.startsWith(setFor(S.ev.id, x.token, x.rsvpEmail) + '-'))));
+    if (pending) { o.textContent = fillT(C.ui.notYes, { guest_name: pending.name }); return; }
     if (!g) { o.textContent = 'Not a coupon for this event.'; return; }
-    const c = coupons(g), cp = c.list.find(x => x.code === v);
     if (S.ev.kids && /-C\d+$/.test(v)) { o.textContent = "No cocktails at kids' parties."; return; }
+    const c = coupons(g), cp = c.list.find(x => x.code === v);
     if (!cp) { o.textContent = 'Not a valid coupon for ' + g.name + '.'; return; }
-    if (g.redeemed.includes(v)) { o.textContent = 'Already used.'; return; }
-    if (c.e.choice) { const usedC = g.redeemed.some(x => /-C\d+$/.test(x)), usedM = g.redeemed.some(x => /-M\d+$/.test(x)); if ((cp.kind === 'cocktail' && usedM) || (cp.kind === 'mocktail' && usedC)) { o.textContent = g.name + ' already chose ' + (usedC ? 'the cocktail' : 'mocktails') + '.'; return; } }
-    g.redeemed.push(v); save(); o.textContent = 'OK: 1 ' + cp.kind + ' for ' + g.name + '.' + (cp.kind === 'cocktail' ? ' 18+ only: check ID.' : ''); rBarTableOnly();
+    if (isUsed(S.ev.id, v)) { o.textContent = 'Already used.'; return; }
+    const block = choiceBlock(c.e.choice, c.list, cp, S.ev.id); if (block) { o.textContent = g.name + ' already chose ' + block + '.'; return; }
+    if (!markUsed(S.ev.id, v, deleteDate(S.ev) ? deleteDate(S.ev).getTime() : null)) { o.textContent = 'Already used.'; return; }
+    g.redeemed.push(v); save(); o.textContent = 'OK: 1 ' + cp.kind + ' for ' + g.name + (g.rsvpEmail ? ' (' + maskEmail(g.rsvpEmail) + ')' : '') + '.' + (cp.kind === 'cocktail' ? ' 18+ only: check ID.' : ''); rBarTableOnly();
   };
 }
+// "2 mocktails or 1 cocktail": once one kind is used, the other kind is gone
+function choiceBlock(choice, list, cp, eid) { if (!choice) return ''; const usedC = list.some(x => x.kind === 'cocktail' && isUsed(eid, x.code)), usedM = list.some(x => x.kind === 'mocktail' && isUsed(eid, x.code)); if (cp.kind === 'cocktail' && usedM) return 'mocktails'; if (cp.kind === 'mocktail' && usedC) return 'the cocktail'; return ''; }
 function rBarTableOnly() { const keep = $('#bcOut').textContent; rBar(); $('#bcOut').textContent = keep; }
 
 // ---------- guest RSVP page (#rsvp=...) ----------
@@ -243,18 +258,22 @@ function guestView() {
   $('#tabs').hidden = true; $('#walletBtn').hidden = true;
   if (!d || !d.t) { $('#app').innerHTML = '<section class="card"><h2>This invite link isn\'t recognised</h2><p class="hint">Ask your host to send it again.</p></section>'; return; }
   const R = C.rsvp, K = C.kids, kids = !!d.kids;
+  // Guest-side guard too: kids' parties and under-18 guests never get a cocktail or the choice line
+  const adultOk = !kids && !d.u18 && !!d.alc, E = { m: clamp(d.m), c: adultOk ? clamp(d.c) : 0, choice: adultOk && !!d.ch }, hasC = hasCoupons(E);
   setPage(kids, d.pb);
-  const form = { name: d.guest_name, plus: 1, adults: 1, diet: '', dietOk: false, allergy: '', parentOk: false, msg: '' };
-  const read = () => { const v = id => ($('#' + id) || {}).value, ck = id => !!($('#' + id) || {}).checked; form.name = v('rn') || ''; form.msg = v('rm') || ''; if (kids) { form.adults = Math.max(0, +v('rad') || 0); form.parentOk = ck('rpc'); form.allergy = form.parentOk ? (v('ra') || '').trim() : ''; } else { form.plus = Math.max(1, +v('rp') || 1); form.dietOk = ck('rdc'); form.diet = form.dietOk ? (v('rd') || '').trim() : ''; } };
+  const form = { name: d.guest_name, email: '', plus: 1, adults: 1, diet: '', dietOk: false, allergy: '', parentOk: false, msg: '' };
+  const read = () => { const v = id => ($('#' + id) || {}).value, ck = id => !!($('#' + id) || {}).checked; form.name = v('rn') || ''; form.email = (v('re') || '').trim(); form.msg = v('rm') || ''; if (kids) { form.adults = Math.max(0, +v('rad') || 0); form.parentOk = ck('rpc'); form.allergy = form.parentOk ? (v('ra') || '').trim() : ''; } else { form.plus = Math.max(1, +v('rp') || 1); form.dietOk = ck('rdc'); form.diet = form.dietOk ? (v('rd') || '').trim() : ''; } };
   const draw = st => {
     const fields = kids
       ? `<label>${esc(K.fChild)}<input id="rn" value="${esc(form.name)}" maxlength="40" data-testid="rn"></label>
+        <label>${esc(kids ? C.ui.fEmailKids : C.ui.fEmail)}<input id="re" type="email" inputmode="email" autocomplete="email" value="${esc(form.email)}" maxlength="120" data-testid="re" aria-describedby="reConsent"></label><p class="hint small" id="reConsent" data-testid="email-consent">${esc(C.ui.emailConsent)}</p><p class="err" id="reErr" data-testid="email-err" hidden></p>
         <label>${esc(K.fAdults)}<input id="rad" type="number" min="0" max="10" value="${form.adults}" data-testid="rad"></label>
         <label class="row"><input type="checkbox" id="rpc" ${form.parentOk ? 'checked' : ''} style="width:auto" data-testid="rpc"> ${esc(fillT(C.ui.parentConsent, d))}</label>
         <label>${esc(K.fAllergy)}<input id="ra" maxlength="160" value="${esc(form.allergy)}" ${form.parentOk ? '' : 'disabled'} data-testid="ra"></label>
         <label>${esc(K.fMsg)}<textarea id="rm" maxlength="240" data-testid="rm">${esc(form.msg)}</textarea></label>
         <p class="hint" style="margin-bottom:2px">${esc(K.fComing)}</p>`
       : `<label>${esc(R.fName)}<input id="rn" value="${esc(form.name)}" maxlength="60" data-testid="rn"></label>
+        <label>${esc(kids ? C.ui.fEmailKids : C.ui.fEmail)}<input id="re" type="email" inputmode="email" autocomplete="email" value="${esc(form.email)}" maxlength="120" data-testid="re" aria-describedby="reConsent"></label><p class="hint small" id="reConsent" data-testid="email-consent">${esc(C.ui.emailConsent)}</p><p class="err" id="reErr" data-testid="email-err" hidden></p>
         ${d.po ? `<label>${esc(R.fPlus)}<input id="rp" type="number" min="1" max="10" value="${form.plus}" data-testid="rp"></label>` : ''}
         <label>${esc(R.fDiet)}<input id="rd" maxlength="120" value="${esc(form.diet)}" data-testid="rd"></label><label class="row"><input type="checkbox" id="rdc" ${form.dietOk ? 'checked' : ''} style="width:auto" data-testid="rdc"> ${esc(fillT(C.ui.dietConsent, d))}</label>
         <label>${esc(R.fMsg)}<textarea id="rm" maxlength="240" data-testid="rm">${esc(form.msg)}</textarea></label>`;
@@ -262,20 +281,65 @@ function guestView() {
     $('#app').innerHTML = `${inviteCard(d, d.d)}<section class="card" data-testid="rsvp-page"><h2>${esc(R.heading)}</h2>${fields}
       <div class="seg mt" id="rb">${btns.map(([k, l]) => `<button data-r="${k}" class="${st === k ? 'on ' + k : ''}" data-testid="r-${k}">${esc(l)}</button>`).join('')}</div>
       <div id="ro" data-testid="ro"></div>
-      ${d.cp && d.cp.length ? `<h3>${kids ? 'Your mocktail coupons' : 'Your drink coupons'}</h3>${d.ch && !kids ? `<p>${esc(C.coupon.choiceLine)}</p>` : ''}${d.cp.filter(c => !kids || c.kind === 'mocktail').map(c => couponCard(c.txt || fillT(C.coupon[c.kind], Object.assign({}, d, { code: c.code })), c.kind)).join('')}${kids ? `<p class="hint" data-testid="kids-ingredients">${esc(fillT(C.kids.ingredients, d))}</p>` : ''}<p class="hint">${esc(C.coupon.smallPrint)}</p>` : ''}
+      ${hasC && st !== 'yes' ? `<p class="hint" data-testid="coupons-after-yes">${esc(kids ? C.ui.kidsCouponAfterYes : C.ui.couponAfterYes)}</p>` : ''}
       <p class="hint small" data-testid="privacy">${esc(fillT(C.privacy, d))}${kids ? ' ' + esc(K.privacyExtra) : ''}</p></section>`;
     const pc = $('#rpc'); if (pc) pc.onchange = () => { read(); draw(st); }; // allergies field stays locked until the parent/carer tick
     $$('#rb button').forEach(b => b.onclick = () => {
-      read(); const k = b.dataset.r, line = 'RSVP:' + d.t + ':' + k, plus = kids ? 0 : (d.po ? form.plus - 1 : 0);
+      read(); const k = b.dataset.r, plus = kids ? 0 : (d.po ? form.plus - 1 : 0);
+      if ((form.email && !validEmail(form.email)) || (k === 'yes' && !validEmail(form.email))) { const er = $('#reErr'); er.textContent = form.email ? C.ui.emailBad : C.ui.emailNeeded; er.hidden = false; $('#re').focus(); return; } // email required on Yes; format checked
+      const line = 'RSVP:' + d.t + ':' + k + (validEmail(form.email) ? ':' + form.email : '');
       let local = false; // same device as the host (preview demo): update the host's list directly
-      try { const H = JSON.parse(localStorage.getItem(KEY)); const g = H && H.guests.find(x => x.id === d.gid && x.token === d.t); if (g) { g.rsvp = k; g.plus = plus; g.diet = form.diet; g.allergy = form.allergy; g.adultsStaying = form.adults; g.msg = form.msg; localStorage.setItem(KEY, JSON.stringify(H)); local = true; } } catch (e) {}
-      const body = (d.host_name ? 'Hi ' + d.host_name + ',\n\n' : '') + form.name + ': ' + k + (plus ? ' (+' + plus + ')' : '') + (kids ? '\nAdults staying: ' + form.adults : '') + (form.diet ? '\nDietary: ' + form.diet : '') + (form.allergy ? '\nAllergies or dietary needs: ' + form.allergy : '') + (form.msg ? '\nMessage: ' + form.msg : '') + '\n\n' + line;
+      try { const H = JSON.parse(localStorage.getItem(KEY)); const g = H && H.guests.find(x => x.id === d.gid && x.token === d.t); if (g) { g.rsvp = k; if (validEmail(form.email)) { g.rsvpEmail = form.email; if (!g.email) g.email = form.email; } g.plus = plus; g.diet = form.diet; g.allergy = form.allergy; g.adultsStaying = form.adults; g.msg = form.msg; localStorage.setItem(KEY, JSON.stringify(H)); local = true; } } catch (e) {}
+      const body = (d.host_name ? 'Hi ' + d.host_name + ',\n\n' : '') + form.name + (form.email ? ' <' + form.email + '>' : '') + ': ' + k + (plus ? ' (+' + plus + ')' : '') + (kids ? '\nAdults staying: ' + form.adults : '') + (form.diet ? '\nDietary: ' + form.diet : '') + (form.allergy ? '\nAllergies or dietary needs: ' + form.allergy : '') + (form.msg ? '\nMessage: ' + form.msg : '') + '\n\n' + line;
       const txt = k === 'yes' ? (kids ? C.ui.kidsConfirmYes : R.confirmYes) : k === 'no' ? fillT(R.confirmNo, d) : '';
       draw(k);
-      $('#ro').innerHTML = `${txt ? `<p class="note" data-testid="r-thanks">${esc(txt)}</p>` : ''}${d.he ? `<a class="btn small" href="mailto:${encodeURIComponent(d.he)}?subject=${encodeURIComponent('RSVP ' + k + ': ' + (kids ? d.child_name : d.event_name))}&body=${encodeURIComponent(body)}" data-testid="r-mail">✉ Send my reply to ${esc(d.host_name)}</a>` : ''}<p class="hint small">Reply code: <b>${esc(line)}</b>${local ? ' · saved on this device' : ''}</p>`;
+      $('#ro').innerHTML = `${txt ? `<p class="note" data-testid="r-thanks">${esc(txt)}</p>` : ''}${k === 'yes' && hasC ? qrBlock(d, E, kids, form.email) : ''}${d.he ? `<a class="btn small" href="mailto:${encodeURIComponent(d.he)}?subject=${encodeURIComponent('RSVP ' + k + ': ' + (kids ? d.child_name : d.event_name))}&body=${encodeURIComponent(body)}" data-testid="r-mail">✉ Send my reply to ${esc(d.host_name)}</a>` : ''}<p class="hint small">Reply code: <b>${esc(line)}</b>${local ? ' · saved on this device' : ''}</p>`;
+      wirePng();
     });
   };
   draw(null);
+}
+
+// Created on RSVP yes: the guest's coupon set + a QR code that opens a plain https coupon page (no app needed).
+// The QR is drawn in the browser by the vendored qrcode-generator (MIT); no guest data goes to any outside QR service.
+// The QR link carries an opaque coupon-set ID (a one-way hash of event + invite token + email), the MASKED email and what to
+// display. The full email is never in the link.
+function couponLink(d, E, em) { return dir() + 'coupon.html#c=' + b64u(JSON.stringify({ v: 1, eid: d.eid, s: setFor(d.eid, d.t, em), n: d.guest_name, me: maskEmail(em), en: d.cen || d.event_name, hn: d.host_name, k: d.kids ? 1 : 0, ch: E.choice ? 1 : 0, m: E.m, c: E.c, pb: d.pb, del: d.del || 0 })); }
+function qrImg(url, alt) { const q = window.qrcode(0, 'M'); q.addData(url); q.make(); return q.createImgTag(5, 16, alt); }
+function qrBlock(d, E, kids, em) {
+  const url = couponLink(d, E, em), n = couponsFor(setFor(d.eid, d.t, em), E, !kids && E.c > 0).length, safe = String(d.guest_name || 'guest').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'guest';
+  return `<div class="qrbox" data-testid="qr-box"><h3>${esc(C.ui.qrHead)}</h3><p class="hint" data-testid="qr-email">${esc(maskEmail(em))}</p><div class="qr" data-testid="qr">${qrImg(url, 'QR code for your coupons')}</div>
+    <p data-testid="qr-help">${esc(kids ? C.ui.kidsQrHelp : C.ui.qrHelp)}</p><p class="hint" data-testid="qr-count">${n} coupon${n === 1 ? '' : 's'}: ${esc(describe(E) + (E.choice ? ' (your pick at the bar)' : ''))}</p>
+    <div class="row" style="justify-content:center"><a class="btn small" href="${esc(url)}" target="_blank" rel="noopener" data-testid="coupon-link">${esc(C.ui.openCoupons)}</a><a class="btn small alt" id="qrDl" download="coupons-${esc(safe)}.png" data-testid="qr-download" aria-disabled="true">${esc(C.ui.downloadQr)}</a></div>
+    <p class="note warm" data-testid="email-stub">${esc(fillT(C.ui.emailStub, { email: em }))}</p></div>`;
+}
+// Downloadable PNG of the QR, drawn on a canvas in the browser (scaled up, crisp, white border)
+function wirePng() { const im = $('[data-testid=qr] img'), a = $('#qrDl'); if (!im || !a) return; const go = () => { const s = 4, c = document.createElement('canvas'); c.width = im.naturalWidth * s; c.height = im.naturalHeight * s; const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height); a.href = c.toDataURL('image/png'); a.removeAttribute('aria-disabled'); }; if (im.complete && im.naturalWidth) go(); else im.onload = go; }
+
+// ---------- coupon page (coupon.html#c=...): opened by scanning the guest's QR ----------
+function couponView() {
+  let d; try { d = JSON.parse(unb64u(location.hash.replace(/^#c=/, ''))); } catch (e) { d = null; }
+  $('#tabs').hidden = true; $('#walletBtn').hidden = true;
+  if (!d || !d.s || !d.eid) { $('#app').innerHTML = `<section class="card"><h2>These coupons aren't recognised</h2><p class="hint">Ask the guest to open their QR code again.</p></section>`; return; }
+  const kids = !!d.k, E = { m: clamp(d.m), c: kids ? 0 : clamp(d.c), choice: !kids && !!d.ch }; setPage(kids, d.pb);
+  if (d.del && Date.now() >= d.del) { usedAll(); $('#app').innerHTML = `<section class="card" data-testid="coupon-expired"><h2>${esc(C.ui.couponsDeleted)}</h2></section>`; return; } // 30 days after the event
+  const list = couponsFor(d.s, E, !kids), v = { event_name: d.en, guest_name: d.n, host_name: d.hn || 'your host' };
+  const draw = () => {
+    $('#app').innerHTML = `<section class="card" data-testid="coupon-page"><h2>${esc(kids ? 'Mocktail coupons' : 'Drink coupons')} for ${esc(d.n)}</h2><p class="hint">${d.me ? `<b data-testid="cp-email">${esc(d.me)}</b> · ` : ''}${esc(d.en)}${d.hn ? ' · hosted by ' + esc(d.hn) : ''}</p>
+      <p class="note warm" data-testid="single-use-note">${esc(C.ui.singleUse)}</p>${E.choice ? `<p>${esc(C.coupon.choiceLine)}</p>` : ''}
+      ${list.map(cp => { const used = isUsed(d.eid, cp.code), blk = !used && choiceBlock(E.choice, list, cp, d.eid);
+        return `<div class="cwrap ${used ? 'used' : ''}" data-testid="cp-${cp.code}">${couponCard(couponTextFrom(kids, cp.kind, Object.assign({ code: cp.code }, v)), cp.kind)}
+        <div class="row cid"><span>Coupon ID <b data-testid="id-${cp.code}">${esc(cp.code)}</b></span>${used ? `<b class="usedtag" data-testid="status-${cp.code}">${esc(C.ui.used)}</b>` : blk ? `<span class="hint" data-testid="status-${cp.code}">${esc(fillT(C.ui.choiceTaken, { guest_name: d.n, choice: blk }))}</span>` : `<button class="btn small" data-use="${cp.code}" data-testid="use-${cp.code}">${esc(C.ui.markUsed)}</button>`}</div></div>`; }).join('') || '<p>No coupons for this guest.</p>'}
+      ${kids ? `<p class="hint" data-testid="kids-ingredients">${esc(fillT(C.kids.ingredients, v))}</p>` : `<p class="hint">${esc(fillT('Drinks are offered by {host_name}, not Makerman Services.', v))}</p>`}<p class="hint">${esc(C.coupon.smallPrint)}</p></section>`;
+    $$('[data-use]').forEach(b => b.onclick = () => {
+      const c = b.dataset.use, cp = list.find(x => x.code === c);
+      if (!confirm(fillT(C.ui.confirmUse, { code: c }))) return;
+      if (isUsed(d.eid, c)) { toast('Already used'); return draw(); } // re-checked at the moment of use
+      if (choiceBlock(E.choice, list, cp, d.eid)) { toast('Not available'); return draw(); }
+      markUsed(d.eid, c, d.del); toast(C.ui.used + ': ' + c); draw();
+    });
+  };
+  draw(); window.addEventListener('storage', e => { if (e.key === UKEY) draw(); });
 }
 
 // ---------- boot ----------
@@ -283,8 +347,8 @@ document.title = CFG.appName + ' ' + CFG.brand; $('#appName').textContent = CFG.
 $('#modal').onclick = e => { if (e.target.id === 'modal' || e.target.hasAttribute('data-close')) $('#modal').hidden = true; };
 $('#walletBtn').onclick = openWallet;
 $$('#tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.tab; save(); render(); window.scrollTo(0, 0); });
-window.addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } });
+window.addEventListener('storage', e => { if (e.key === KEY && document.body.dataset.page !== 'coupons' && !/^#rsvp=/.test(location.hash)) { S = load(); render(); } });
 window.addEventListener('hashchange', () => location.reload());
-window.IE = { state: () => S, isCharged, chargeGuests, entitlement: g => entitlement(g), coupons, wallet, mime, autoPurge, hasToken: () => gToken !== null };
-if (/^#rsvp=/.test(location.hash)) guestView(); else render();
+window.IE = { maskEmail, state: () => S, isCharged, chargeGuests, entitlement: g => entitlement(g), coupons, wallet, inviteText, rsvpLink, autoPurge, setFor, isUsed, last: null };
+if (document.body.dataset.page === 'coupons') couponView(); else if (/^#rsvp=/.test(location.hash)) guestView(); else render();
 })();
