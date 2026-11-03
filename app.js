@@ -22,7 +22,7 @@ const copyTxt = t => (navigator.clipboard ? navigator.clipboard.writeText(t) : P
 function blank() { return { ev: { id: code(10), name: '', host: '', hostEmail: '', date: '', time: '19:00', venue: '', note: '', rsvpBy: '', alcohol: true, kids: false, child: '', age: '', endTime: '', dropOff: '', plusOnes: false, pageBg: '', theme: '', src: '', design: CFG.art.invites[0].id }, bar: { mode: 'choice', mc: 2, cc: 1, m: 2, c: 1 }, guests: [], tab: 'event' }; }
 let S = load();
 function load() { try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.ev) return s; } catch (e) {} return blank(); }
-function fixEv() { S.ev.id = S.ev.id || code(10); if (!S.ev.kids && !S.ev.alcohol && ['cock1', 'choice'].includes(S.bar.mode)) S.bar.mode = 'mock2'; if (S.ev.kids) { S.ev.alcohol = false; if (!['mock2', 'custom', 'none'].includes(S.bar.mode)) S.bar.mode = 'mock2'; } }
+function fixEv() { S.ev.id = S.ev.id || code(10); if (!S.ev.kids && !S.ev.alcohol && ['cock1', 'choice'].includes(S.bar.mode)) S.bar.mode = 'mock2'; if (S.ev.kids) { S.ev.alcohol = false; if (!['mock2', 'custom', 'none', 'surprise'].includes(S.bar.mode)) S.bar.mode = 'mock2'; } }
 function save() { fixEv(); localStorage.setItem(KEY, JSON.stringify(S)); }
 function deleteDate(ev) { if (!ev.date) return null; const d = new Date(ev.date + 'T00:00:00'); d.setDate(d.getDate() + CFG.deleteAfterDays); return d; }
 const fmtD = d => d ? d.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '';
@@ -55,12 +55,23 @@ function ensureCodes() { // one RSVP token per guest; the coupon set exists ONLY
   });
 }
 // Pure generator: the one-use coupons in one set. Cocktails only for an adult guest at an adults' event with alcohol (belt and braces).
-function couponsFor(set, e, adultOk) { const out = []; if (!set) return out; for (let i = 1; i <= e.m; i++) out.push({ kind: 'mocktail', code: set + '-M' + i }); if (adultOk) for (let i = 1; i <= e.c; i++) out.push({ kind: 'cocktail', code: set + '-C' + i }); return out; }
+function couponsFor(set, e, adultOk) { const out = []; if (!set) return out; for (let i = 1; i <= e.m; i++) out.push({ kind: 'mocktail', code: set + '-M' + i }); if (adultOk) for (let i = 1; i <= e.c; i++) out.push({ kind: 'cocktail', code: set + '-C' + i }); for (let i = 1; i <= (e.s || 0); i++) out.push({ kind: 'surprise', code: set + '-S' + i }); return out; }
+// ---------- Surprise coupon: the host's own offer, the SAME for every guest who gets one. No winners, draws or chance of any kind. ----------
+const SP_MAX = { title: 40, what: 80, msg: 120, terms: 160 };
+const spOf = () => Object.assign({ title: '', what: '', n: 1, msg: '', terms: '' }, S.bar.sp || {});
+const spText = sp => [sp.title, sp.what, sp.msg, sp.terms].join(' ').toLowerCase().replace(/non[- ]?alcoholic|alcohol[- ]free|mocktails?|zero[- ]proof/g, ' ');
+const SP_ALC = /\b(alcohol\w*|beers?|wines?|champagne|prosecco|bubbly|spirits?|vodka|gin|rum|whisk(e)?y|bourbon|brandy|tequila|cocktails?|liquor|liqueur|booze|ciders?|sake|schnapps|margaritas?|mojitos?|sangria|spritz|ales?|lagers?|pints?|shots?|seltzers?|byo|bottle shop|bar tab)\b/;
+const SP_CHANCE = /\b(lotter(y|ies)|lotto|raffles?|draws?|drawn|prize draw|win|wins|winners?|winning|lucky|luck|random(ly)?|chance|sweepstakes?|jackpot|spin|scratch(ies)?|gambl\w*|bet|bets|betting|mystery prize)\b/;
+const spAlcohol = sp => SP_ALC.test(spText(sp)), spChance = sp => SP_CHANCE.test(spText(sp));
+function spProblem(sp, kids) { if (!String(sp.title).trim() || !String(sp.what).trim()) return C.ui.spMissing; if (spChance(sp)) return C.ui.spChance; if (kids && spAlcohol(sp)) return C.ui.spKidsAlcohol; return ''; }
+function spCard(sp, v) { return [String(sp.title || 'Surprise').toUpperCase(), 'Good for: ' + sp.what, v.event_name, 'Guest: ' + v.guest_name, 'Code ' + v.code, 'One use only', sp.msg, sp.terms, fillT(C.ui.spFixed, v)].map(x => String(x || '').trim()).filter(Boolean).join(' · '); }
+const spWire = sp => ({ t: String(sp.title).slice(0, SP_MAX.title), w: String(sp.what).slice(0, SP_MAX.what), m: String(sp.msg).slice(0, SP_MAX.msg), x: String(sp.terms).slice(0, SP_MAX.terms) });
+const spUnwire = w => ({ title: (w && w.t) || '', what: (w && w.w) || '', msg: (w && w.m) || '', terms: (w && w.x) || '' });
 function coupons(g) { // NONE until this guest RSVPs yes
   const e = entitlement(g);
   return { e, list: g.rsvp === 'yes' ? couponsFor(g.set || setFor(S.ev.id, g.token || '', g.rsvpEmail || ''), e, !S.ev.kids && !g.under18 && S.ev.alcohol) : [] };
 }
-const hasCoupons = e => e.m + e.c > 0;
+const hasCoupons = e => e.m + e.c + (e.s || 0) > 0;
 // 'used' is remembered on THIS device only (localStorage). The real app checks each coupon once on the server.
 // Partly masked email for coupons and the bar: first 2 letters, then •••, then the domain (jo•••@gmail.com). Only the host's list shows it in full.
 function maskEmail(e) { e = String(e || '').trim(); const i = e.lastIndexOf('@'); if (i < 1) return ''; const L = e.slice(0, i); return L.slice(0, L.length > 2 ? 2 : 1) + '•••' + e.slice(i); }
@@ -69,9 +80,9 @@ const usedAll = () => { let u; try { u = JSON.parse(localStorage.getItem(UKEY)) 
 const isUsed = (eid, c) => !!usedAll()[eid + ':' + c];
 function markUsed(eid, c, del) { const u = usedAll(), k = eid + ':' + c; if (u[k]) return false; u[k] = { at: Date.now(), del: del || null }; localStorage.setItem(UKEY, JSON.stringify(u)); return true; }
 const couponEvent = () => S.ev.kids ? (S.ev.name || (S.ev.child || 'our birthday star') + "'s party") : (S.ev.name || 'our party');
-function couponTextFrom(kids, kind, v) { return fillT(kids ? C.kids.mocktail : C.coupon[kind], v); }
+function couponTextFrom(kids, kind, v, sp) { if (kind === 'surprise') return spCard(sp || spOf(), v); return fillT(kids ? C.kids.mocktail : C.coupon[kind], v); }
 function couponText(g, cp) { return couponTextFrom(S.ev.kids, cp.kind, { event_name: couponEvent(), guest_name: g.name, code: cp.code, host_name: S.ev.host || 'your host' }); }
-function describe(e) { if (e.choice) return '2 mocktails or 1 cocktail'; const a = []; if (e.m) a.push(e.m + ' mocktail' + (e.m === 1 ? '' : 's')); if (e.c) a.push(e.c + ' cocktail' + (e.c === 1 ? '' : 's') + ' (18+)'); return a.join(' + ') || 'no drink coupons'; }
+function describe(e) { if (e.choice) return '2 mocktails or 1 cocktail'; const a = []; if (e.s) a.push(e.s + ' surprise coupon' + (e.s === 1 ? '' : 's') + (e.st ? ' (' + e.st + ')' : '')); if (e.m) a.push(e.m + ' mocktail' + (e.m === 1 ? '' : 's')); if (e.c) a.push(e.c + ' cocktail' + (e.c === 1 ? '' : 's') + ' (18+)'); return a.join(' + ') || (S.bar && S.bar.mode === 'surprise' ? 'no coupons' : 'no drink coupons'); }
 
 // ---------- tokens: Robot Crew model (total balance + paid part; free spent first; bought kept separately) ----------
 function wallet() { try { const w = JSON.parse(localStorage.getItem(WKEY)); if (w && w.v === 1) return w; } catch (e) {} const w = { v: 1, balance: T.welcome, paid: 0, ledger: [{ at: Date.now(), kind: 'grant', amount: T.welcome, note: 'welcome' }] }; localStorage.setItem(WKEY, JSON.stringify(w)); return w; }
@@ -106,7 +117,7 @@ function openWallet() {
 
 // ---------- links + email ----------
 function vars(g) { const ev = S.ev; return { kids: !!ev.kids, event_name: ev.name || 'our party', host_name: ev.host || 'your host', guest_name: g ? g.name : '', date: ev.date ? fmtD(new Date(ev.date + 'T00:00:00')) : 'Date to be confirmed', time: fmtTime(ev.time), venue: ev.venue || 'Venue to be confirmed', host_note: ev.note || '', rsvp_deadline: ev.rsvpBy ? fmtD(new Date(ev.rsvpBy + 'T00:00:00')) : 'soon', delete_date: fmtD(deleteDate(ev)) || '30 days after the event', child_name: ev.child || 'our birthday star', age: ev.age || '', start_time: fmtTime(ev.time), end_time: fmtTime(ev.endTime) || 'late', drop_off_note: ev.dropOff || '', theme: ev.theme || '' }; }
-function payload(g) { const e = entitlement(g); return { v: 2, t: g.token, gid: g.id, eid: S.ev.id, ...vars(g), he: S.ev.hostEmail, d: S.ev.design, pb: S.ev.pageBg, k: S.ev.kids ? 1 : 0, po: S.ev.plusOnes ? 1 : 0, u18: g.under18 ? 1 : 0, alc: S.ev.alcohol ? 1 : 0, ch: e.choice ? 1 : 0, m: e.m, c: e.c, cen: couponEvent(), del: deleteDate(S.ev) ? deleteDate(S.ev).getTime() : 0 }; } // entitlement only: NO coupons in the invite
+function payload(g) { const e = entitlement(g); return { v: 2, t: g.token, gid: g.id, eid: S.ev.id, ...vars(g), he: S.ev.hostEmail, d: S.ev.design, pb: S.ev.pageBg, k: S.ev.kids ? 1 : 0, po: S.ev.plusOnes ? 1 : 0, u18: g.under18 ? 1 : 0, alc: S.ev.alcohol ? 1 : 0, ch: e.choice ? 1 : 0, m: e.m, c: e.c, sn: e.s || 0, sp: e.s ? spWire(spOf()) : undefined, cen: couponEvent(), del: deleteDate(S.ev) ? deleteDate(S.ev).getTime() : 0 }; } // entitlement only: NO coupons in the invite
 const base = () => location.origin + location.pathname.replace(/coupon\.html$/, '');
 const dir = () => location.origin + location.pathname.replace(/[^/]*$/, '');
 const rsvpLink = g => base() + '#rsvp=' + b64u(JSON.stringify(payload(g)));
@@ -119,7 +130,7 @@ function inviteText(g) {
     if (l === '{host_note}' && !v.host_note) return;
     if (l.startsWith('@coupon:')) { if (has && !/included below/.test(l)) out.push(l.slice(8)); return; } // "included below" no longer true: coupons come after RSVP yes
     out.push(l);
-    if (has && /\{rsvp_link\}/.test(l)) out.push(S.ev.kids ? C.ui.kidsCouponAfterYes : C.ui.couponAfterYes);
+    if (has && /\{rsvp_link\}/.test(l)) out.push(S.bar.mode === 'surprise' ? C.ui.spAfterYes : S.ev.kids ? C.ui.kidsCouponAfterYes : C.ui.couponAfterYes);
   });
   return out.map(l => fillT(l, v).replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1: $2').replace(/\s+$/, '')).join('\n');
 }
@@ -128,7 +139,7 @@ const shareTitle = g => fillT(S.ev.kids ? C.kids.subject : C.email.subject, vars
 // ---------- invite + coupon visuals (text drawn live over the art) ----------
 const art = id => CFG.art.invites.find(a => a.id === id) || CFG.art.invites[0];
 function inviteCard(v, design) { const a = art(design); return `<div class="inv" style="${a.src ? `background-image:url('${esc(a.src)}')` : `background:${a.css}`};color:${a.ink}" data-testid="invite-card">${a.emoji ? `<div class="emo">${a.emoji}</div>` : ''}<div class="pane" style="background:${a.pane}">${v.kids ? `<p>${esc(fillT("You're invited to {child_name}'s birthday party, turning {age}!", v))}</p><h1>${esc(v.child_name)}</h1><p>📅 ${esc(v.date)} · ⏰ ${esc(v.start_time)} to ${esc(v.end_time)}</p>` : `<p>${esc(v.host_name)} would love you to join</p><h1>${esc(v.event_name)}</h1><p>📅 ${esc(v.date)} · ⏰ ${esc(v.time)}</p>`}<p>📍 ${esc(v.venue)}</p>${v.theme ? `<p data-testid="card-theme">🎨 ${esc(v.theme)}</p>` : ''}${v.host_note ? `<p><i>${esc(v.host_note)}</i></p>` : ''}</div>${a.ai ? `<small class="artlabel" data-testid="art-label">${esc(C.artLabel)}</small>` : ''}</div>`; }
-function couponCard(text, kind) { return `<div class="cpn" style="background-image:url('${esc(CFG.art[kind])}')" data-testid="coupon-${kind}"><div class="cpt">${esc(text)}</div>${CFG.art.couponAi ? `<small class="artlabel">${esc(C.artLabel)}</small>` : ''}</div>`; }
+function couponCard(text, kind) { return `<div class="cpn${kind === 'surprise' ? ' sp' : ''}" style="${kind === 'surprise' ? '' : `background-image:url('${esc(CFG.art[kind])}')`}" data-testid="coupon-${kind}"><div class="cpt">${esc(text)}</div>${CFG.art.couponAi && kind !== 'surprise' ? `<small class="artlabel">${esc(C.artLabel)}</small>` : ''}</div>`; }
 
 // ---------- host screens ----------
 const pageList = kids => ((CFG.art.page || {})[kids ? 'kids' : 'adult'] || []);
@@ -186,23 +197,29 @@ function rGuests() {
   const da = $('#delAll'); if (da) da.onclick = () => { if (!confirm('Delete every guest\'s details from this device?')) return; S.guests = []; save(); render(); };
 }
 function rDrinks() {
-  const b = S.bar, alc = S.ev.alcohol, modes = S.ev.kids ? [['mock2', '2 mocktails'], ['custom', 'Custom'], ['none', 'None']] : [['mock2', '2 mocktails'], ['cock1', '1 cocktail'], ['choice', '2 mocktails or 1 cocktail'], ['custom', 'Custom'], ['none', 'None']];
+  const b = S.bar, alc = S.ev.alcohol, modes = (S.ev.kids ? [['mock2', '2 mocktails'], ['custom', 'Custom'], ['none', 'None']] : [['mock2', '2 mocktails'], ['cock1', '1 cocktail'], ['choice', '2 mocktails or 1 cocktail'], ['custom', 'Custom'], ['none', 'None']]).concat([['surprise', C.ui.spOption]]);
+  const sp = spOf(), spErr = b.mode === 'surprise' ? spProblem(sp, S.ev.kids) : '', spU18 = b.mode === 'surprise' && !S.ev.kids && !spErr && spAlcohol(sp);
+  const spF = (k, l, tag = 'input') => tag === 'input' ? `<label>${esc(l)}<input data-sp="${k}" maxlength="${SP_MAX[k]}" value="${esc(sp[k])}" data-testid="sp-${k}"></label>` : `<label>${esc(l)}<textarea data-sp="${k}" maxlength="${SP_MAX[k]}" data-testid="sp-${k}">${esc(sp[k])}</textarea></label>`;
+  const spHtml = b.mode !== 'surprise' ? '' : `<div class="note" data-testid="sp-hint">${esc(C.ui.spHint)}</div>${spF('title', C.ui.spTitle)}${spF('what', C.ui.spWhat)}<label>${esc(C.ui.spCount)}<input data-sp="n" type="number" min="1" max="10" value="${Math.max(1, clamp(sp.n))}" data-testid="sp-n"></label>${spF('msg', C.ui.spMsg, 'textarea')}${spF('terms', C.ui.spTerms, 'textarea')}
+    <p class="hint" data-testid="sp-fixed">${esc(fillT(C.ui.spFixed, { host_name: S.ev.host || 'your host' }))}</p>${spErr ? `<p class="err" data-testid="sp-err">${esc(spErr)}</p>` : ''}${spU18 ? `<p class="note warm" data-testid="sp-u18">${esc(C.ui.spUnder18)}</p>` : ''}`;
   const sample = { name: 'Sample guest', set: 'ABCD-EFGH', token: '', rsvp: 'yes', under18: false }, s18 = Object.assign({}, sample, { under18: true });
-  $('#app').innerHTML = `<section class="card"><h2>${S.ev.kids ? 'Mocktail coupons' : 'Bar drink coupons'}</h2><p class="hint">Each guest gets exactly one coupon set, created when they RSVP yes. Change the mix any time: codes stay the same.</p>
-    ${S.ev.kids ? `<p class="note" data-testid="kids-drinks">${esc(C.kids.hostNote)}</p>` : `<label class="row"><input type="checkbox" id="alc" ${alc ? 'checked' : ''} style="width:auto" data-testid="alc"> Alcohol is served at this event</label>`}
+  $('#app').innerHTML = `<section class="card"><h2>${b.mode === 'surprise' ? 'Surprise coupons' : S.ev.kids ? 'Mocktail coupons' : 'Bar drink coupons'}</h2><p class="hint">Each guest gets exactly one coupon set, created when they RSVP yes. Change the mix any time: codes stay the same.</p>
+    ${S.ev.kids ? (b.mode === 'surprise' ? '' : `<p class="note" data-testid="kids-drinks">${esc(C.kids.hostNote)}</p>`) : `<label class="row"><input type="checkbox" id="alc" ${alc ? 'checked' : ''} style="width:auto" data-testid="alc"> Alcohol is served at this event</label>`}
     ${alc ? `<p class="note warm" data-testid="host-resp">${esc(C.hostResponsibility)}</p>` : ''}
     <label>Coupons per guest<select id="mode" data-testid="mode">${modes.map(([k, l]) => `<option value="${k}" ${b.mode === k ? 'selected' : ''} ${!alc && ['cock1', 'choice'].includes(k) ? 'disabled' : ''}>${l}</option>`).join('')}</select></label>
     ${b.mode === 'mock2' ? `<label>Mocktails per guest<input id="cmc" type="number" min="1" max="10" value="${b.mc == null ? 2 : b.mc}" data-testid="count"></label>` : ''}${b.mode === 'cock1' ? `<label>Cocktails per guest (18+)<input id="ccc" type="number" min="1" max="10" value="${b.cc == null ? 1 : b.cc}" data-testid="count"></label>` : ''}
-    ${b.mode === 'custom' ? `<div class="grid2 mt"><label>Mocktails per guest<input id="cm" type="number" min="0" max="10" value="${b.m}" data-testid="cm"></label>${alc ? `<label>Cocktails per guest (18+)<input id="cc" type="number" min="0" max="10" value="${b.c}" data-testid="cc"></label>` : ''}</div>` : ''}
+    ${spHtml}${b.mode === 'custom' ? `<div class="grid2 mt"><label>Mocktails per guest<input id="cm" type="number" min="0" max="10" value="${b.m}" data-testid="cm"></label>${alc ? `<label>Cocktails per guest (18+)<input id="cc" type="number" min="0" max="10" value="${b.c}" data-testid="cc"></label>` : ''}</div>` : ''}
     <p class="hint" data-testid="rule">Each guest: ${esc(describe(entitlement(sample)))}.${S.ev.kids ? '' : ` Guests marked under 18: ${esc(describe(entitlement(s18)))}.`}</p>
     <h3>What a guest sees</h3>${entitlement(sample).choice ? `<p>${esc(C.coupon.choiceLine)}</p>` : ''}${coupons(sample).list.filter((c, i, l) => l.findIndex(x => x.kind === c.kind) === i).map(c => couponCard(couponText(sample, c), c.kind)).join('')}${S.ev.kids && coupons(sample).list.length ? `<p class="hint" data-testid="kids-ingredients">${esc(fillT(C.kids.ingredients, vars(null)))}</p>` : ''}<p class="hint">${esc(C.coupon.smallPrint)}</p></section>`;
   if ($('#alc')) $('#alc').onchange = e => { S.ev.alcohol = e.target.checked; if (!S.ev.alcohol && ['cock1', 'choice'].includes(b.mode)) b.mode = 'mock2'; save(); render(); };
   $('#mode').onchange = e => { b.mode = e.target.value; save(); render(); };
   const cmc = $('#cmc'), ccc = $('#ccc'); if (cmc) cmc.onchange = () => { b.mc = Math.max(1, clamp(cmc.value)); save(); render(); }; if (ccc) ccc.onchange = () => { b.cc = Math.max(1, clamp(ccc.value)); save(); render(); };
   const cm = $('#cm'), cc = $('#cc'); if (cm) cm.onchange = () => { b.m = clamp(cm.value); save(); render(); }; if (cc) cc.onchange = () => { b.c = clamp(cc.value); save(); render(); };
+  $$('[data-sp]').forEach(i => i.onchange = () => { b.sp = spOf(); const k = i.dataset.sp; b.sp[k] = k === 'n' ? Math.max(1, clamp(i.value)) : i.value.slice(0, SP_MAX[k]); save(); render(); });
 }
 // 'none' mode: no coupons at all
-const _ent = entitlement; entitlement = function (g) { if (S.bar.mode === 'none') return { m: 0, c: 0, choice: false }; if (S.ev.kids) return { m: S.bar.mode === 'custom' ? clamp(S.bar.m) : clamp(S.bar.mc == null ? 2 : S.bar.mc), c: 0, choice: false }; // kids: mocktails only, never a cocktail or the choice line
+const _ent = entitlement; entitlement = function (g) { if (S.bar.mode === 'none') return { m: 0, c: 0, choice: false };
+  if (S.bar.mode === 'surprise') { const sp = spOf(), bad = spProblem(sp, S.ev.kids) || ((g.under18 || S.ev.kids) && spAlcohol(sp)); return { m: 0, c: 0, choice: false, s: bad ? 0 : Math.max(1, clamp(sp.n)), st: sp.title }; } // same surprise for every guest; never alcohol for kids or under-18s if (S.ev.kids) return { m: S.bar.mode === 'custom' ? clamp(S.bar.m) : clamp(S.bar.mc == null ? 2 : S.bar.mc), c: 0, choice: false }; // kids: mocktails only, never a cocktail or the choice line
   const e = _ent(g); if (S.ev.kids || g.under18) { e.c = 0; e.choice = false; } return e; }; // eslint-disable-line no-func-assign
 
 function rSend() {
@@ -245,7 +262,7 @@ function rBar() {
     if (isUsed(S.ev.id, v)) { o.textContent = 'Already used.'; return; }
     const block = choiceBlock(c.e.choice, c.list, cp, S.ev.id); if (block) { o.textContent = g.name + ' already chose ' + block + '.'; return; }
     if (!markUsed(S.ev.id, v, deleteDate(S.ev) ? deleteDate(S.ev).getTime() : null)) { o.textContent = 'Already used.'; return; }
-    g.redeemed.push(v); save(); o.textContent = 'OK: 1 ' + cp.kind + ' for ' + g.name + (g.rsvpEmail ? ' (' + maskEmail(g.rsvpEmail) + ')' : '') + '.' + (cp.kind === 'cocktail' ? ' 18+ only: check ID.' : ''); rBarTableOnly();
+    g.redeemed.push(v); save(); o.textContent = 'OK: 1 ' + (cp.kind === 'surprise' ? 'surprise (' + (spOf().title || 'Surprise') + ')' : cp.kind) + ' for ' + g.name + (g.rsvpEmail ? ' (' + maskEmail(g.rsvpEmail) + ')' : '') + '.' + (cp.kind === 'cocktail' ? ' 18+ only: check ID.' : ''); rBarTableOnly();
   };
 }
 // "2 mocktails or 1 cocktail": once one kind is used, the other kind is gone
@@ -259,7 +276,7 @@ function guestView() {
   if (!d || !d.t) { $('#app').innerHTML = '<section class="card"><h2>This invite link isn\'t recognised</h2><p class="hint">Ask your host to send it again.</p></section>'; return; }
   const R = C.rsvp, K = C.kids, kids = !!d.kids;
   // Guest-side guard too: kids' parties and under-18 guests never get a cocktail or the choice line
-  const adultOk = !kids && !d.u18 && !!d.alc, E = { m: clamp(d.m), c: adultOk ? clamp(d.c) : 0, choice: adultOk && !!d.ch }, hasC = hasCoupons(E);
+  const adultOk = !kids && !d.u18 && !!d.alc, SPd = spUnwire(d.sp), E = { m: clamp(d.m), c: adultOk ? clamp(d.c) : 0, choice: adultOk && !!d.ch, s: (spProblem(SPd, kids) || ((kids || d.u18) && spAlcohol(SPd))) ? 0 : clamp(d.sn), st: SPd.title, sp: SPd }, hasC = hasCoupons(E);
   setPage(kids, d.pb);
   const form = { name: d.guest_name, email: '', plus: 1, adults: 1, diet: '', dietOk: false, allergy: '', parentOk: false, msg: '' };
   const read = () => { const v = id => ($('#' + id) || {}).value, ck = id => !!($('#' + id) || {}).checked; form.name = v('rn') || ''; form.email = (v('re') || '').trim(); form.msg = v('rm') || ''; if (kids) { form.adults = Math.max(0, +v('rad') || 0); form.parentOk = ck('rpc'); form.allergy = form.parentOk ? (v('ra') || '').trim() : ''; } else { form.plus = Math.max(1, +v('rp') || 1); form.dietOk = ck('rdc'); form.diet = form.dietOk ? (v('rd') || '').trim() : ''; } };
@@ -281,7 +298,7 @@ function guestView() {
     $('#app').innerHTML = `${inviteCard(d, d.d)}<section class="card" data-testid="rsvp-page"><h2>${esc(R.heading)}</h2>${fields}
       <div class="seg mt" id="rb">${btns.map(([k, l]) => `<button data-r="${k}" class="${st === k ? 'on ' + k : ''}" data-testid="r-${k}">${esc(l)}</button>`).join('')}</div>
       <div id="ro" data-testid="ro"></div>
-      ${hasC && st !== 'yes' ? `<p class="hint" data-testid="coupons-after-yes">${esc(kids ? C.ui.kidsCouponAfterYes : C.ui.couponAfterYes)}</p>` : ''}
+      ${hasC && st !== 'yes' ? `<p class="hint" data-testid="coupons-after-yes">${esc(E.s && !E.m && !E.c ? C.ui.spAfterYes : kids ? C.ui.kidsCouponAfterYes : C.ui.couponAfterYes)}</p>` : ''}
       <p class="hint small" data-testid="privacy">${esc(fillT(C.privacy, d))}${kids ? ' ' + esc(K.privacyExtra) : ''}</p></section>`;
     const pc = $('#rpc'); if (pc) pc.onchange = () => { read(); draw(st); }; // allergies field stays locked until the parent/carer tick
     $$('#rb button').forEach(b => b.onclick = () => {
@@ -304,12 +321,12 @@ function guestView() {
 // The QR is drawn in the browser by the vendored qrcode-generator (MIT); no guest data goes to any outside QR service.
 // The QR link carries an opaque coupon-set ID (a one-way hash of event + invite token + email), the MASKED email and what to
 // display. The full email is never in the link.
-function couponLink(d, E, em) { return dir() + 'coupon.html#c=' + b64u(JSON.stringify({ v: 1, eid: d.eid, s: setFor(d.eid, d.t, em), n: d.guest_name, me: maskEmail(em), en: d.cen || d.event_name, hn: d.host_name, k: d.kids ? 1 : 0, ch: E.choice ? 1 : 0, m: E.m, c: E.c, pb: d.pb, del: d.del || 0 })); }
+function couponLink(d, E, em) { return dir() + 'coupon.html#c=' + b64u(JSON.stringify({ v: 1, eid: d.eid, s: setFor(d.eid, d.t, em), n: d.guest_name, me: maskEmail(em), en: d.cen || d.event_name, hn: d.host_name, k: d.kids ? 1 : 0, ch: E.choice ? 1 : 0, m: E.m, c: E.c, sn: E.s || 0, sp: E.s ? spWire(E.sp) : undefined, u: d.u18 ? 1 : 0, pb: d.pb, del: d.del || 0 })); }
 function qrImg(url, alt) { const q = window.qrcode(0, 'M'); q.addData(url); q.make(); return q.createImgTag(5, 16, alt); }
 function qrBlock(d, E, kids, em) {
   const url = couponLink(d, E, em), n = couponsFor(setFor(d.eid, d.t, em), E, !kids && E.c > 0).length, safe = String(d.guest_name || 'guest').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'guest';
   return `<div class="qrbox" data-testid="qr-box"><h3>${esc(C.ui.qrHead)}</h3><p class="hint" data-testid="qr-email">${esc(maskEmail(em))}</p><div class="qr" data-testid="qr">${qrImg(url, 'QR code for your coupons')}</div>
-    <p data-testid="qr-help">${esc(kids ? C.ui.kidsQrHelp : C.ui.qrHelp)}</p><p class="hint" data-testid="qr-count">${n} coupon${n === 1 ? '' : 's'}: ${esc(describe(E) + (E.choice ? ' (your pick at the bar)' : ''))}</p>
+    <p data-testid="qr-help">${esc(E.s && !E.m && !E.c ? fillT(C.ui.spQrHelp, { host_name: d.host_name || 'your host' }) : kids ? C.ui.kidsQrHelp : C.ui.qrHelp)}</p><p class="hint" data-testid="qr-count">${n} coupon${n === 1 ? '' : 's'}: ${esc(describe(E) + (E.choice ? ' (your pick at the bar)' : ''))}</p>
     <div class="row" style="justify-content:center"><a class="btn small" href="${esc(url)}" target="_blank" rel="noopener" data-testid="coupon-link">${esc(C.ui.openCoupons)}</a><a class="btn small alt" id="qrDl" download="coupons-${esc(safe)}.png" data-testid="qr-download" aria-disabled="true">${esc(C.ui.downloadQr)}</a></div>
     <p class="note warm" data-testid="email-stub">${esc(fillT(C.ui.emailStub, { email: em }))}</p></div>`;
 }
@@ -321,16 +338,16 @@ function couponView() {
   let d; try { d = JSON.parse(unb64u(location.hash.replace(/^#c=/, ''))); } catch (e) { d = null; }
   $('#tabs').hidden = true; $('#walletBtn').hidden = true;
   if (!d || !d.s || !d.eid) { $('#app').innerHTML = `<section class="card"><h2>These coupons aren't recognised</h2><p class="hint">Ask the guest to open their QR code again.</p></section>`; return; }
-  const kids = !!d.k, E = { m: clamp(d.m), c: kids ? 0 : clamp(d.c), choice: !kids && !!d.ch }; setPage(kids, d.pb);
+  const kids = !!d.k, SPd = spUnwire(d.sp), E = { m: clamp(d.m), c: kids || d.u ? 0 : clamp(d.c), choice: !kids && !d.u && !!d.ch, s: (spProblem(SPd, kids) || ((kids || d.u) && spAlcohol(SPd))) ? 0 : clamp(d.sn) }; setPage(kids, d.pb);
   if (d.del && Date.now() >= d.del) { usedAll(); $('#app').innerHTML = `<section class="card" data-testid="coupon-expired"><h2>${esc(C.ui.couponsDeleted)}</h2></section>`; return; } // 30 days after the event
-  const list = couponsFor(d.s, E, !kids), v = { event_name: d.en, guest_name: d.n, host_name: d.hn || 'your host' };
+  const list = couponsFor(d.s, E, !kids && !d.u), v = { event_name: d.en, guest_name: d.n, host_name: d.hn || 'your host' };
   const draw = () => {
-    $('#app').innerHTML = `<section class="card" data-testid="coupon-page"><h2>${esc(kids ? 'Mocktail coupons' : 'Drink coupons')} for ${esc(d.n)}</h2><p class="hint">${d.me ? `<b data-testid="cp-email">${esc(d.me)}</b> · ` : ''}${esc(d.en)}${d.hn ? ' · hosted by ' + esc(d.hn) : ''}</p>
+    $('#app').innerHTML = `<section class="card" data-testid="coupon-page"><h2>${esc(E.s && !E.m && !E.c ? 'Surprise coupons' : kids ? 'Mocktail coupons' : 'Drink coupons')} for ${esc(d.n)}</h2><p class="hint">${d.me ? `<b data-testid="cp-email">${esc(d.me)}</b> · ` : ''}${esc(d.en)}${d.hn ? ' · hosted by ' + esc(d.hn) : ''}</p>
       <p class="note warm" data-testid="single-use-note">${esc(C.ui.singleUse)}</p>${E.choice ? `<p>${esc(C.coupon.choiceLine)}</p>` : ''}
       ${list.map(cp => { const used = isUsed(d.eid, cp.code), blk = !used && choiceBlock(E.choice, list, cp, d.eid);
-        return `<div class="cwrap ${used ? 'used' : ''}" data-testid="cp-${cp.code}">${couponCard(couponTextFrom(kids, cp.kind, Object.assign({ code: cp.code }, v)), cp.kind)}
+        return `<div class="cwrap ${used ? 'used' : ''}" data-testid="cp-${cp.code}">${couponCard(couponTextFrom(kids, cp.kind, Object.assign({ code: cp.code }, v), SPd), cp.kind)}
         <div class="row cid"><span>Coupon ID <b data-testid="id-${cp.code}">${esc(cp.code)}</b></span>${used ? `<b class="usedtag" data-testid="status-${cp.code}">${esc(C.ui.used)}</b>` : blk ? `<span class="hint" data-testid="status-${cp.code}">${esc(fillT(C.ui.choiceTaken, { guest_name: d.n, choice: blk }))}</span>` : `<button class="btn small" data-use="${cp.code}" data-testid="use-${cp.code}">${esc(C.ui.markUsed)}</button>`}</div></div>`; }).join('') || '<p>No coupons for this guest.</p>'}
-      ${kids ? `<p class="hint" data-testid="kids-ingredients">${esc(fillT(C.kids.ingredients, v))}</p>` : `<p class="hint">${esc(fillT('Drinks are offered by {host_name}, not Makerman Services.', v))}</p>`}<p class="hint">${esc(C.coupon.smallPrint)}</p></section>`;
+      ${E.m || E.c ? (kids ? `<p class="hint" data-testid="kids-ingredients">${esc(fillT(C.kids.ingredients, v))}</p>` : `<p class="hint">${esc(fillT('Drinks are offered by {host_name}, not Makerman Services.', v))}</p>`) : ''}<p class="hint">${esc(C.coupon.smallPrint)}</p></section>`;
     $$('[data-use]').forEach(b => b.onclick = () => {
       const c = b.dataset.use, cp = list.find(x => x.code === c);
       if (!confirm(fillT(C.ui.confirmUse, { code: c }))) return;

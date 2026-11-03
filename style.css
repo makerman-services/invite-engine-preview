@@ -57,3 +57,4 @@ body{padding-bottom:26px}
 .usedtag{display:inline-block;background:#3F3A4F;color:#fff;border-radius:8px;padding:4px 10px;letter-spacing:.08em}
 .err{color:#B3261E;font-weight:600;font-size:13px;margin:4px 0}
 .err[hidden]{display:none}
+.cpn.sp{background:linear-gradient(135deg,#5b2a86 0%,#b8487a 55%,#f2a65a 100%)}
