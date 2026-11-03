@@ -2,25 +2,28 @@
 
 Copied from `/workspace/ops/content/paid-art-2026-11-03/SOURCES.md` (Content Creator). Only the images used in this repo are listed.
 
-**Legal pass:** `/workspace/ops/legal/canva-paid-art-pass-2026-11-03.md` (3 Nov 2026, 17:48 Sydney): PASS for paid use of the 10 images other than the Media Manager portrait. The Media Manager portrait is ON HOLD and is not used anywhere. Resizing and webp are allowed only if the original PNG stays untouched and the derivative keeps its eXIf and iCCP metadata. General information, not legal advice. Nothing goes live without Mal's yes.
+**Legal pass:** `/workspace/ops/legal/canva-paid-art-pass-2026-11-03.md` (3 Nov 2026, 17:48 Sydney): PASS for paid use of the 10 plain images other than the Media Manager portrait. Later updates in that file:
+- 17:55 update: the remade Media Manager portrait (Canva MAHZ1u7pFTo, unedited, metadata intact) PASSES, so all 11 are cleared.
+- 17:56 update: the 7 *-nametag.png versions (all edited and exported in Canva, no PIL) PASS, provided the tags are role names only, with no real people's names or brand marks.
+Resizing and webp are allowed only if the original PNG stays untouched and the derivative keeps its eXIf and iCCP metadata. The earlier PIL-edited Media Manager portrait (`MAHZ1lH9BKI`) is superseded and not used. General information, not legal advice. Nothing goes live without Mal's yes.
 
 **Licence (all rows):** Canva AI-generated output under Canva's Terms of Use and AI Product Terms. It is *not* a Canva Content License stock item, and no Pro elements were used. Legal still needs to confirm commercial-use rights on this account's plan and the AI-labelling wording (see LEGAL-REQUEST.md).
 
 **Label shown on the product pages:** "Some images made with Canva AI."
 
-## Images
+## Source media
 | # | File | Product | Size (px) | Tool | Canva media ID / link | Prompt | Notes |
 |---|---|---|---|---|---|---|---|
 | 8 | `invite-pour-adult-invite-bg-canva-ai.png` | Invite & Pour | 1136x1408 | Canva AI (generate-image) | `MAHZ1n4f04A`, https://www.canva.com/M/MAHZ1n4f04A | Elegant adult party invitation background, deep navy and gold, soft gold confetti and subtle champagne-style bubbles around the edges, warm bokeh lights, large clear empty space in the centre for text, flat illustrated style, no text, no letters, no logos, no people, no bottles or brands | No text, logos or people. Large empty centre for overlay text. |
 | 9 | `invite-pour-kids-invite-bg-canva-ai.png` | Invite & Pour | 1136x1408 | Canva AI (generate-image) | `MAHZ1iTjiA0`, https://www.canva.com/M/MAHZ1iTjiA0 | Bright cheerful kids birthday party invitation background, colourful balloons, bunting and confetti around the edges, pastel sky blue background, large clear empty space in the centre for text, flat cartoon illustration style, no text, no letters, no numbers, no logos, no people, no characters | No text, logos or people. Large empty centre for overlay text. |
 
 ## Derivatives in this repo
-The original PNGs are kept untouched in `/workspace/ops/content/paid-art-2026-11-03/` (sha256 below, checked before and after). The deployed files are resized webp copies made with Pillow 13 (LANCZOS, quality 82). The original eXIf block and iCCP profile were copied across byte for byte, and this was verified by reading them back.
+The original PNGs are kept untouched in `/workspace/ops/content/paid-art-2026-11-03/` (sha256 below, checked before and after conversion). The deployed files are resized webp copies made with Pillow 13 (LANCZOS). Whatever eXIf block and iCCP profile the original has were copied across byte for byte, and this was verified by reading them back. The Canva name-tag exports carry eXIf but no iCCP profile, so there was no iCCP to carry.
 
-| Deployed file | Original PNG | Original sha256 |
-|---|---|---|
-| `site/img/canva-adult-invite.webp` | `invite-pour-adult-invite-bg-canva-ai.png` | `6635dfb1e8959e5bec54156c35520ed460c79bb2e3543df6dea5a0ff0c44bdf2` |
-| `site/img/canva-kids-invite.webp` | `invite-pour-kids-invite-bg-canva-ai.png` | `37c592fcf898916e1ed15f0e9a755c95496e5650f20757dd62316b53467ea12f` |
+| Deployed file | Original PNG | Original sha256 | Metadata carried |
+|---|---|---|---|
+| `site/img/canva-adult-invite.webp` | `invite-pour-adult-invite-bg-canva-ai.png` | `6635dfb1e8959e5bec54156c35520ed460c79bb2e3543df6dea5a0ff0c44bdf2` | eXIf yes, iCCP yes |
+| `site/img/canva-kids-invite.webp` | `invite-pour-kids-invite-bg-canva-ai.png` | `37c592fcf898916e1ed15f0e9a755c95496e5650f20757dd62316b53467ea12f` | eXIf yes, iCCP yes |
 
 ## Licence clause (Legal condition)
 
@@ -52,4 +55,3 @@ Section "Disclaimer":
 
 - **Edits:** Media Manager camera edit is logged in row 6 (garbled pseudo-label painted over in dark grey and blurred via PIL).
 - **Label:** Product pages carry: Some images made with Canva AI.
-
