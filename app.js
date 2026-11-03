@@ -132,7 +132,14 @@ function inviteCard(v, design) { const a = art(design); return `<div class="inv"
 function couponCard(text, kind) { return `<div class="cpn" style="background-image:url('${esc(CFG.art[kind])}')" data-testid="coupon-${kind}"><div class="cpt">${esc(text)}</div>${CFG.art.couponAi ? `<small class="artlabel">${esc(C.artLabel)}</small>` : ''}</div>`; }
 
 // ---------- host screens ----------
+function setPage(kids) { // full-page art from config; falls back to plain colour
+  const P = CFG.art.page || {}, src = kids ? P.kids : P.default, ai = kids ? P.kidsAi : P.defaultAi, bg = $('#pageBg'), lab = $('#pageArtLabel'); if (!bg) return;
+  bg.style.backgroundColor = P.colour || ''; bg.style.backgroundImage = src ? `url('${src}')` : 'none';
+  document.querySelector('.page-fade').style.display = src ? '' : 'none';
+  lab.hidden = !(src && ai); lab.textContent = 'Background: ' + C.artLabel;
+}
 function render() {
+  setPage(!!S.ev.kids);
   autoPurge(); ensureCodes(); save();
   $('#tokBal').textContent = wallet().balance;
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
@@ -237,6 +244,7 @@ function guestView() {
   $('#tabs').hidden = true; $('#walletBtn').hidden = true;
   if (!d || !d.t) { $('#app').innerHTML = '<section class="card"><h2>This invite link isn\'t recognised</h2><p class="hint">Ask your host to send it again.</p></section>'; return; }
   const R = C.rsvp, K = C.kids, kids = !!d.kids;
+  setPage(kids);
   const form = { name: d.guest_name, plus: 1, adults: 1, diet: '', dietOk: false, allergy: '', parentOk: false, msg: '' };
   const read = () => { const v = id => ($('#' + id) || {}).value, ck = id => !!($('#' + id) || {}).checked; form.name = v('rn') || ''; form.msg = v('rm') || ''; if (kids) { form.adults = Math.max(0, +v('rad') || 0); form.parentOk = ck('rpc'); form.allergy = form.parentOk ? (v('ra') || '').trim() : ''; } else { form.plus = Math.max(1, +v('rp') || 1); form.dietOk = ck('rdc'); form.diet = form.dietOk ? (v('rd') || '').trim() : ''; } };
   const draw = st => {

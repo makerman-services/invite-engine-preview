@@ -66,9 +66,9 @@ window.IE_COPY = {
     fChild: "Child's name", fComing: "Coming?", yes: "Yes", no: "No", maybe: "Maybe", fAdults: "Number of adults staying",
     fAllergy: "Allergies or dietary needs (optional, only with consent)", fMsg: "Message for the host (optional)",
     // Kids' coupons (Mal 15:19 + Legal rules): mocktails only, 2 per kid by default, host can switch off. Never "at the bar".
-    mocktail: "MOCKTAIL · Good for 1 mocktail (non-alcoholic) · {event_name} · Guest: {guest_name} · Code {code} · One use only · Show this at the party · Offered by {host_name}, not Makerman Services",
+    mocktail: "MOCKTAIL · Good for 1 mocktail (non-alcoholic) · {event_name} · Guest: {guest_name} · Code {code} · One use only · Show this at the party · Check allergies with {host_name}. · Offered by {host_name}, not Makerman Services",
     ingredients: "Ingredients are up to {host_name}. Check allergies with the host.",
-    hostNote: "Kids' party: 2 mocktail coupons per kid by default. No cocktails at kids' parties.",
+    hostNote: "Kids' party: 2 mocktail coupons per kid by default (you can change or switch them off). No cocktails at kids' parties. Ingredients are up to you, so check guests' allergies.",
     privacyExtra: "A parent or carer fills in the RSVP, and we only collect the child's first name. Allergy or dietary details for a child are shared only with a parent's or carer's consent (they tick the consent box)."
   },
   ent: {
