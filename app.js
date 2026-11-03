@@ -157,6 +157,7 @@ function render() {
   autoPurge(); ensureCodes(); save();
   $('#tokBal').textContent = wallet().balance;
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
+  const barTab = $('#tabs [data-tab=bar]'); if (barTab) barTab.textContent = '5 · ' + (S.ev.kids ? 'Coupons' : 'Bar'); // kids' parties: never "Bar" (Legal 18:05)
   ({ event: rEvent, guests: rGuests, drinks: rDrinks, send: rSend, bar: rBar })[S.tab]();
 }
 function rEvent() {
@@ -248,7 +249,7 @@ function rSend() {
   });
 }
 function rBar() {
-  $('#app').innerHTML = `<section class="card"><h2>Bar check</h2><p class="hint">Scan the guest's QR code with any phone camera, or type a coupon code here. Each coupon works once.</p>
+  $('#app').innerHTML = `<section class="card"><h2 data-testid="check-h">${S.ev.kids ? 'Coupons check' : 'Bar check'}</h2><p class="hint">Scan the guest's QR code with any phone camera, or type a coupon code here. Each coupon works once.</p>
     <p class="note warm" data-testid="single-use-note">${esc(C.ui.singleUse)}</p><div class="row"><input id="bc" placeholder="ABCD-EFGH-M1" data-testid="bc"><button class="btn small" id="bcBtn" data-testid="bc-btn">Check and use</button></div><p id="bcOut" data-testid="bc-out"></p>
     <table><tr><th>Guest</th><th>RSVP</th><th>Coupons</th><th>Used</th></tr>${S.guests.map(g => { const c = coupons(g); return `<tr><td>${esc(g.name)}${g.under18 ? ' (under 18)' : ''}${g.rsvpEmail ? `<br><small data-testid="bar-em-${g.id}">${esc(maskEmail(g.rsvpEmail))}</small>` : ''}</td><td>${esc(g.rsvp || '-')}</td><td>${g.rsvp === 'yes' ? esc(g.set) + ': ' + esc(describe(c.e)) : 'none yet'}</td><td>${c.list.filter(x => isUsed(S.ev.id, x.code)).length}</td></tr>`; }).join('')}</table></section>`;
   $('#bcBtn').onclick = () => {
@@ -272,7 +273,7 @@ function rBarTableOnly() { const keep = $('#bcOut').textContent; rBar(); $('#bcO
 // ---------- guest RSVP page (#rsvp=...) ----------
 function guestView() {
   let d; try { d = JSON.parse(unb64u(location.hash.slice(6))); } catch (e) { d = null; }
-  $('#tabs').hidden = true; $('#walletBtn').hidden = true;
+  $('#tabs').hidden = true; $('#walletBtn').hidden = true; if ($('#priceLine')) $('#priceLine').hidden = true;
   if (!d || !d.t) { $('#app').innerHTML = '<section class="card"><h2>This invite link isn\'t recognised</h2><p class="hint">Ask your host to send it again.</p></section>'; return; }
   const R = C.rsvp, K = C.kids, kids = !!d.kids;
   // Guest-side guard too: kids' parties and under-18 guests never get a cocktail or the choice line
@@ -336,7 +337,7 @@ function wirePng() { const im = $('[data-testid=qr] img'), a = $('#qrDl'); if (!
 // ---------- coupon page (coupon.html#c=...): opened by scanning the guest's QR ----------
 function couponView() {
   let d; try { d = JSON.parse(unb64u(location.hash.replace(/^#c=/, ''))); } catch (e) { d = null; }
-  $('#tabs').hidden = true; $('#walletBtn').hidden = true;
+  $('#tabs').hidden = true; $('#walletBtn').hidden = true; if ($('#priceLine')) $('#priceLine').hidden = true;
   if (!d || !d.s || !d.eid) { $('#app').innerHTML = `<section class="card"><h2>These coupons aren't recognised</h2><p class="hint">Ask the guest to open their QR code again.</p></section>`; return; }
   const kids = !!d.k, SPd = spUnwire(d.sp), E = { m: clamp(d.m), c: kids || d.u ? 0 : clamp(d.c), choice: !kids && !d.u && !!d.ch, s: (spProblem(SPd, kids) || ((kids || d.u) && spAlcohol(SPd))) ? 0 : clamp(d.sn) }; setPage(kids, d.pb);
   if (d.del && Date.now() >= d.del) { usedAll(); $('#app').innerHTML = `<section class="card" data-testid="coupon-expired"><h2>${esc(C.ui.couponsDeleted)}</h2></section>`; return; } // 30 days after the event
