@@ -48,7 +48,7 @@ window.IE_COPY = {
     "Refunds: unused tokens can be refunded within 14 days of purchase. Contact us at makermanservices@gmail.com.",
     "Nothing in these terms limits your rights under the Australian Consumer Law, including your rights to a refund or remedy if the service has a major fault."
   ],
-  // Kids' parties + entertainment: EXACTLY from /workspace/ops/content/myparty-invites/kids-and-entertainment.md (Legal passed 15:13)
+  // Kids' parties: EXACTLY from /workspace/ops/content/myparty-invites/kids-and-entertainment.md (Legal passed 15:13)
   kids: {
     subject: "{child_name} is having a party! 🎈",
     lines: [
@@ -56,7 +56,6 @@ window.IE_COPY = {
       "You're invited to {child_name}'s birthday party, turning {age}!",
       "📅 {date} · ⏰ {start_time} to {end_time}",
       "📍 {venue}",
-      "{entertainment_line}",
       "Please RSVP by {rsvp_deadline}: [RSVP here]({rsvp_link})",
       "Let us know about any allergies or dietary needs.",
       "A parent or carer is welcome to stay. {drop_off_note}",
@@ -70,24 +69,6 @@ window.IE_COPY = {
     ingredients: "Ingredients are up to {host_name}. Check allergies with the host.",
     hostNote: "Kids' party: 2 mocktail coupons per kid by default (you can change or switch them off). No cocktails at kids' parties. Ingredients are up to you, so check guests' allergies.",
     privacyExtra: "A parent or carer fills in the RSVP, and we only collect the child's first name. Allergy or dietary details for a child are shared only with a parent's or carer's consent (they tick the consent box)."
-  },
-  ent: {
-    booked: "I've booked this entertainer",
-    hostNote: "Hosts book and pay entertainers directly. My Party only lists the idea, and Makerman Services doesn't supply or vet performers.",
-    items: [
-      { id: 'clown', emoji: '🤡', name: 'Clown', line: "Get ready to giggle! A clown will be there with balloon animals, silly tricks and games." },
-      { id: 'magician', emoji: '🎩', name: 'Magician', line: "Abracadabra! A magician will amaze everyone with a live magic show." },
-      { id: 'hero', emoji: '🦸', name: 'Costume hero', line: "A real-life costumed hero is coming to help with hero training and games!", note: "Our own original hero characters only. No named, branded or look-alike movie or comic characters." },
-      { id: 'drums', emoji: '🥁', name: 'Drumming band', line: "Feel the beat! A live drumming band will get everyone moving." },
-      { id: 'singer', emoji: '🎤', name: 'Singer', line: "A live singer will lead songs and party dances." },
-      { id: 'lebanese', emoji: '🎶', name: 'Lebanese band', line: "Dabke time! A live Lebanese band will bring the music and the dance floor to life." },
-      { id: 'turkish', emoji: '🎶', name: 'Turkish band', line: "A live Turkish band will fill the party with music and dancing." },
-      { id: 'iraqi', emoji: '🎶', name: 'Iraqi band', line: "A live Iraqi band will bring traditional rhythms and plenty of dancing." },
-      { id: 'aussie', emoji: '🎶', name: 'Australian band', line: "A live Aussie band will play the party favourites everyone can sing along to." },
-      { id: 'other', emoji: '✏️', name: 'None / other', line: '' }
-    ],
-    otherTerms: "You're responsible for anything you type. No brand or character names you don't have rights to.",
-    tip: "Ask your entertainer for a current Working with Children Check if they're working with kids, and for their public liability insurance."
   },
   artLabel: "AI-generated art, made with Grok Imagine",
   ui: { // NOT in copy.md: placeholders for Legal/Content to check

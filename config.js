@@ -17,9 +17,13 @@ window.IE_CONFIG = {
       { id: 'balloons', name: 'Balloons', src: 'img/kids-invite-balloons.jpg', ink: '#1E1B2E', pane: 'rgba(255,255,255,.82)', ai: true, kids: true, adults: false },
       { id: 'circus', name: 'Circus', src: 'img/kids-invite-circus.jpg', ink: '#fff', pane: 'rgba(60,10,20,.55)', ai: true, kids: true, adults: false }
     ],
-    // Full-page background art (fixed layer behind everything; clicks pass through). null = plain colour (pageColour).
-    // Drop new art in by setting a file here: default = adult events, kids = kids' parties.
-    page: { default: null, kids: 'img/kids-page-clown-magician.jpg', kidsAi: true, defaultAi: false, colour: '#F7F5FB', fade: 'rgba(247,245,251,.55)' },
+    // Full-page background art (fixed layer behind everything; clicks pass through). Host picks one in Design.
+    // Add or swap art here; an empty list falls back to the plain colour.
+    page: {
+      colour: '#F7F5FB',
+      adult: [{ id: 'elegant', name: 'Party tables', src: 'img/adult-page-elegant.jpg', ai: true }],
+      kids: [{ id: 'party', name: 'Clown, magician & party table', src: 'img/kids-page-party-v2.jpg', ai: true }, { id: 'cartoon', name: 'Cartoon clown & magician', src: 'img/kids-page-clown-magician.jpg', ai: true }]
+    },
     mocktail: 'img/coupon-mocktail.jpg', cocktail: 'img/coupon-cocktail.jpg', couponAi: true
   },
   // This app's OWN token balance (storage key invitePour.wallet.v1). Separate from any My Party balance; no transfers either way.

@@ -19,10 +19,10 @@ let toastT; const toast = m => { const t = $('#toast'); t.textContent = m; t.hid
 const copyTxt = t => (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Copied'), () => toast('Copy failed'));
 
 // ---------- state (event + guests on this device only) ----------
-function blank() { return { ev: { id: code(10), name: '', host: '', hostEmail: '', date: '', time: '19:00', venue: '', note: '', rsvpBy: '', alcohol: true, kids: false, child: '', age: '', endTime: '', dropOff: '', plusOnes: false, ent: {}, entOther: '', design: CFG.art.invites[0].id }, bar: { mode: 'mock2', m: 2, c: 1 }, guests: [], tab: 'event' }; }
+function blank() { return { ev: { id: code(10), name: '', host: '', hostEmail: '', date: '', time: '19:00', venue: '', note: '', rsvpBy: '', alcohol: true, kids: false, child: '', age: '', endTime: '', dropOff: '', plusOnes: false, pageBg: '', design: CFG.art.invites[0].id }, bar: { mode: 'choice', mc: 2, cc: 1, m: 2, c: 1 }, guests: [], tab: 'event' }; }
 let S = load();
 function load() { try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.ev) return s; } catch (e) {} return blank(); }
-function fixEv() { if (!S.ev.ent || Array.isArray(S.ev.ent)) S.ev.ent = {}; S.ev.id = S.ev.id || code(10); if (S.ev.kids) { S.ev.alcohol = false; if (!['mock2', 'custom', 'none'].includes(S.bar.mode)) S.bar.mode = 'mock2'; } }
+function fixEv() { S.ev.id = S.ev.id || code(10); if (!S.ev.kids && !S.ev.alcohol && ['cock1', 'choice'].includes(S.bar.mode)) S.bar.mode = 'mock2'; if (S.ev.kids) { S.ev.alcohol = false; if (!['mock2', 'custom', 'none'].includes(S.bar.mode)) S.bar.mode = 'mock2'; } }
 function save() { fixEv(); localStorage.setItem(KEY, JSON.stringify(S)); }
 function deleteDate(ev) { if (!ev.date) return null; const d = new Date(ev.date + 'T00:00:00'); d.setDate(d.getDate() + CFG.deleteAfterDays); return d; }
 const fmtD = d => d ? d.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '';
@@ -33,7 +33,7 @@ function autoPurge() { const d = deleteDate(S.ev); if (d && Date.now() >= d.getT
 // ---------- coupons: exactly ONE set per guest, unique codes, under-18 = mocktails only ----------
 function entitlement(g) {
   const b = S.bar; let m = 2, c = 0, choice = false;
-  if (b.mode === 'cock1') { m = 0; c = 1; } else if (b.mode === 'choice') { m = 2; c = 1; choice = true; } else if (b.mode === 'custom') { m = clamp(b.m); c = clamp(b.c); }
+  if (b.mode === 'mock2') { m = clamp(b.mc == null ? 2 : b.mc); } else if (b.mode === 'cock1') { m = 0; c = clamp(b.cc == null ? 1 : b.cc); } else if (b.mode === 'choice') { m = 2; c = 1; choice = true; } else if (b.mode === 'custom') { m = clamp(b.m); c = clamp(b.c); }
   if (g.under18 || !S.ev.alcohol || S.ev.kids) { // ENFORCED HERE: kids' party mode, under-18 guest or alcohol-free event: no cocktail coupon is ever issued to an under-18 guest (or at an alcohol-free event)
     if (choice) return { m: 2, c: 0, choice: false };
     return { m: m + 2 * c, c: 0, choice: false }; // each cocktail is swapped for 2 mocktails
@@ -107,16 +107,14 @@ async function gmailSend(raw) {
 }
 
 // ---------- links + email ----------
-function vars(g) { const ev = S.ev; return { kids: !!ev.kids, event_name: ev.name || 'our party', host_name: ev.host || 'your host', guest_name: g ? g.name : '', date: ev.date ? fmtD(new Date(ev.date + 'T00:00:00')) : 'Date to be confirmed', time: fmtTime(ev.time), venue: ev.venue || 'Venue to be confirmed', host_note: ev.note || '', rsvp_deadline: ev.rsvpBy ? fmtD(new Date(ev.rsvpBy + 'T00:00:00')) : 'soon', delete_date: fmtD(deleteDate(ev)) || '30 days after the event', entertainment_line: entLine(), child_name: ev.child || 'our birthday star', age: ev.age || '', start_time: fmtTime(ev.time), end_time: fmtTime(ev.endTime) || 'late', drop_off_note: ev.dropOff || '' }; }
-// {entertainment_line}: only entertainers the host has ticked "I've booked this entertainer" for
-function entLine() { const ev = S.ev; return C.ent.items.filter(it => ev.ent[it.id] && ev.ent[it.id].booked).map(it => it.id === 'other' ? String(ev.entOther || '').trim() : it.line).filter(Boolean).join(' '); }
-function payload(g) { const cp = coupons(g); cp.list.forEach(c => c.txt = couponText(g, c)); return { v: 1, t: g.token, gid: g.id, ...vars(g), he: S.ev.hostEmail, d: S.ev.design, k: S.ev.kids ? 1 : 0, po: S.ev.plusOnes ? 1 : 0, ch: cp.e.choice ? 1 : 0, cp: cp.list }; }
+function vars(g) { const ev = S.ev; return { kids: !!ev.kids, event_name: ev.name || 'our party', host_name: ev.host || 'your host', guest_name: g ? g.name : '', date: ev.date ? fmtD(new Date(ev.date + 'T00:00:00')) : 'Date to be confirmed', time: fmtTime(ev.time), venue: ev.venue || 'Venue to be confirmed', host_note: ev.note || '', rsvp_deadline: ev.rsvpBy ? fmtD(new Date(ev.rsvpBy + 'T00:00:00')) : 'soon', delete_date: fmtD(deleteDate(ev)) || '30 days after the event', child_name: ev.child || 'our birthday star', age: ev.age || '', start_time: fmtTime(ev.time), end_time: fmtTime(ev.endTime) || 'late', drop_off_note: ev.dropOff || '' }; }
+function payload(g) { const cp = coupons(g); cp.list.forEach(c => c.txt = couponText(g, c)); return { v: 1, t: g.token, gid: g.id, ...vars(g), he: S.ev.hostEmail, d: S.ev.design, pb: S.ev.pageBg, k: S.ev.kids ? 1 : 0, po: S.ev.plusOnes ? 1 : 0, ch: cp.e.choice ? 1 : 0, cp: cp.list }; }
 const base = () => location.origin + location.pathname;
 const rsvpLink = g => base() + '#rsvp=' + b64u(JSON.stringify(payload(g)));
 function emailHtml(g) {
   const v = Object.assign(vars(g), { rsvp_link: rsvpLink(g) }), cp = coupons(g), has = cp.list.length > 0;
-  const L0 = S.ev.kids ? C.kids.lines.slice() : C.email.lines.slice(); if (!S.ev.kids && v.entertainment_line) L0.splice(L0.indexOf('📍 {venue}') + 1, 0, '{entertainment_line}');
-  const lines = L0.filter(l => !(l === '{entertainment_line}' && !v.entertainment_line)).filter(l => !(l.startsWith('@coupon:') && !has)).filter(l => !(l === '{host_note}' && !v.host_note)).map(l => l.replace(/^@coupon:/, ''));
+  const L0 = S.ev.kids ? C.kids.lines.slice() : C.email.lines.slice();
+  const lines = L0.filter(l => !(l.startsWith('@coupon:') && !has)).filter(l => !(l === '{host_note}' && !v.host_note)).map(l => l.replace(/^@coupon:/, ''));
   let html = lines.map(l => { const t = esc(fillT(l, v)); return t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, a, h) => `<a href="${h}">${a}</a>`); }).join('<br>\n').replace(/ (<br>|$)/g, '$1');
   if (has) { const anchor = esc(fillT(S.ev.kids ? 'Let us know about any allergies or dietary needs.' : 'Drinks are offered by {host_name}, not Makerman Services.', v)), i = html.indexOf(anchor); const block = (cp.e.choice && !S.ev.kids ? '<br>\n' + esc(C.coupon.choiceLine) : '') + cp.list.map(c => '<br>\n' + esc(couponText(g, c))).join('') + (S.ev.kids ? '<br>\n' + esc(fillT(C.kids.ingredients, v)) : '') + '<br>\n<small>' + esc(C.coupon.smallPrint) + '</small>'; if (i >= 0) { const end = i + anchor.length; html = html.slice(0, end) + block + html.slice(end); } }
   return html;
@@ -128,18 +126,20 @@ function mime(g) {
 
 // ---------- invite + coupon visuals (text drawn live over the art) ----------
 const art = id => CFG.art.invites.find(a => a.id === id) || CFG.art.invites[0];
-function inviteCard(v, design) { const a = art(design); return `<div class="inv" style="${a.src ? `background-image:url('${esc(a.src)}')` : `background:${a.css}`};color:${a.ink}" data-testid="invite-card">${a.emoji ? `<div class="emo">${a.emoji}</div>` : ''}<div class="pane" style="background:${a.pane}">${v.kids ? `<p>${esc(fillT("You're invited to {child_name}'s birthday party, turning {age}!", v))}</p><h1>${esc(v.child_name)}</h1><p>📅 ${esc(v.date)} · ⏰ ${esc(v.start_time)} to ${esc(v.end_time)}</p>` : `<p>${esc(v.host_name)} would love you to join</p><h1>${esc(v.event_name)}</h1><p>📅 ${esc(v.date)} · ⏰ ${esc(v.time)}</p>`}<p>📍 ${esc(v.venue)}</p>${v.entertainment_line ? `<p data-testid="card-ent">${esc(v.entertainment_line)}</p>` : ''}${v.host_note ? `<p><i>${esc(v.host_note)}</i></p>` : ''}</div>${a.ai ? `<small class="artlabel" data-testid="art-label">${esc(C.artLabel)}</small>` : ''}</div>`; }
+function inviteCard(v, design) { const a = art(design); return `<div class="inv" style="${a.src ? `background-image:url('${esc(a.src)}')` : `background:${a.css}`};color:${a.ink}" data-testid="invite-card">${a.emoji ? `<div class="emo">${a.emoji}</div>` : ''}<div class="pane" style="background:${a.pane}">${v.kids ? `<p>${esc(fillT("You're invited to {child_name}'s birthday party, turning {age}!", v))}</p><h1>${esc(v.child_name)}</h1><p>📅 ${esc(v.date)} · ⏰ ${esc(v.start_time)} to ${esc(v.end_time)}</p>` : `<p>${esc(v.host_name)} would love you to join</p><h1>${esc(v.event_name)}</h1><p>📅 ${esc(v.date)} · ⏰ ${esc(v.time)}</p>`}<p>📍 ${esc(v.venue)}</p>${v.host_note ? `<p><i>${esc(v.host_note)}</i></p>` : ''}</div>${a.ai ? `<small class="artlabel" data-testid="art-label">${esc(C.artLabel)}</small>` : ''}</div>`; }
 function couponCard(text, kind) { return `<div class="cpn" style="background-image:url('${esc(CFG.art[kind])}')" data-testid="coupon-${kind}"><div class="cpt">${esc(text)}</div>${CFG.art.couponAi ? `<small class="artlabel">${esc(C.artLabel)}</small>` : ''}</div>`; }
 
 // ---------- host screens ----------
-function setPage(kids) { // full-page art from config; falls back to plain colour
-  const P = CFG.art.page || {}, src = kids ? P.kids : P.default, ai = kids ? P.kidsAi : P.defaultAi, bg = $('#pageBg'), lab = $('#pageArtLabel'); if (!bg) return;
+const pageList = kids => ((CFG.art.page || {})[kids ? 'kids' : 'adult'] || []);
+function pageArt(kids, id) { const L = pageList(kids); return id === 'none' ? null : (L.find(x => x.id === id) || L[0] || null); }
+function setPage(kids, id) { // full-page art from config; falls back to plain colour
+  const P = CFG.art.page || {}, art = pageArt(kids, id), src = art && art.src, ai = art && art.ai, bg = $('#pageBg'), lab = $('#pageArtLabel'); if (!bg) return;
   bg.style.backgroundColor = P.colour || ''; bg.style.backgroundImage = src ? `url('${src}')` : 'none';
   document.querySelector('.page-fade').style.display = src ? '' : 'none';
   lab.hidden = !(src && ai); lab.textContent = 'Background: ' + C.artLabel;
 }
 function render() {
-  setPage(!!S.ev.kids);
+  setPage(!!S.ev.kids, S.ev.pageBg);
   autoPurge(); ensureCodes(); save();
   $('#tokBal').textContent = wallet().balance;
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
@@ -153,16 +153,11 @@ function rEvent() {
     <label class="row"><input type="checkbox" data-evc="plusOnes" ${ev.plusOnes ? 'checked' : ''} style="width:auto"> Guests can bring plus-ones</label>
     <p class="hint">Guest details are deleted automatically ${CFG.deleteAfterDays} days after the event${deleteDate(ev) ? ' (on ' + esc(fmtD(deleteDate(ev))) + ')' : ''}.</p></section>
     <section class="card"><h2>Design</h2><div class="designs">${designs().map(a => `<button data-design="${a.id}" class="${ev.design === a.id ? 'on' : ''}" data-testid="design-${a.id}"><div class="sw" style="${a.src ? `background-image:url('${esc(a.src)}')` : `background:${a.css}`}">${a.emoji ? a.emoji.split(' ')[0] : ''}</div>${esc(a.name)}</button>`).join('')}</div>
-    <h3>Preview</h3>${inviteCard(vars(null), ev.design)}</section>
-    <section class="card"><h2>Entertainment</h2><p class="note warm" data-testid="ent-disclaimer">${esc(C.ent.hostNote)}</p>
-    ${C.ent.items.map(it => { const s = ev.ent[it.id]; return `<div class="g"><label class="row"><input type="checkbox" data-ent="${it.id}" ${s ? 'checked' : ''} style="width:auto" data-testid="ent-${it.id}"> ${it.emoji} <b>${esc(it.name)}</b></label>${it.line ? `<small>"${esc(it.line)}"</small>` : ''}${it.note ? `<br><small><i>${esc(it.note)}</i></small>` : ''}
-      ${s ? `${it.id === 'other' ? `<input data-entother maxlength="160" value="${esc(ev.entOther)}" placeholder="Your own line for the invite" data-testid="ent-other-text"><p class="hint" data-testid="ent-other-terms">${esc(C.ent.otherTerms)}</p>` : ''}<label class="row"><input type="checkbox" data-booked="${it.id}" ${s.booked ? 'checked' : ''} style="width:auto" data-testid="booked-${it.id}"> ${esc(C.ent.booked)}</label>` : ''}</div>`; }).join('')}
-    ${Object.keys(ev.ent).length ? `<p class="note safe" data-testid="ent-tip">${esc(C.ent.tip)}</p>` : ''}</section>`;
+    <h3>Page background</h3><select id="pageBgSel" data-testid="page-bg">${pageList(ev.kids).map(p => `<option value="${p.id}" ${(pageArt(ev.kids, ev.pageBg) || {}).id === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}<option value="none" ${ev.pageBg === 'none' ? 'selected' : ''}>Plain colour</option></select>
+    <h3>Preview</h3>${inviteCard(vars(null), ev.design)}</section>`;
   $$('[data-ev]').forEach(i => i.onchange = () => { ev[i.dataset.ev] = i.value.trim(); save(); render(); });
-  $$('[data-evc]').forEach(i => i.onchange = () => { ev[i.dataset.evc] = i.checked; if (i.dataset.evc === 'kids' && !designs().some(d => d.id === ev.design)) ev.design = designs()[0].id; save(); render(); });
-  $$('[data-ent]').forEach(i => i.onchange = () => { const k = i.dataset.ent; if (i.checked) ev.ent[k] = { booked: false }; else delete ev.ent[k]; save(); render(); });
-  $$('[data-booked]').forEach(i => i.onchange = () => { ev.ent[i.dataset.booked].booked = i.checked; save(); render(); });
-  const eo = $('[data-entother]'); if (eo) eo.onchange = () => { ev.entOther = eo.value.trim(); save(); render(); };
+  $$('[data-evc]').forEach(i => i.onchange = () => { ev[i.dataset.evc] = i.checked; if (i.dataset.evc === 'kids') { if (!designs().some(d => d.id === ev.design)) ev.design = designs()[0].id; ev.pageBg = ''; S.bar.mode = ev.kids ? 'mock2' : 'choice'; S.bar.mc = 2; S.bar.cc = 1; } save(); render(); });
+  $('#pageBgSel').onchange = e => { ev.pageBg = e.target.value; save(); render(); };
   $$('[data-design]').forEach(b => b.onclick = () => { ev.design = b.dataset.design; save(); render(); });
 }
 function designs() { return CFG.art.invites.filter(a => S.ev.kids ? a.kids : a.adults !== false); }
@@ -187,21 +182,23 @@ function rGuests() {
   const da = $('#delAll'); if (da) da.onclick = () => { if (!confirm('Delete every guest\'s details from this device?')) return; S.guests = []; save(); render(); };
 }
 function rDrinks() {
-  const b = S.bar, alc = S.ev.alcohol, modes = S.ev.kids ? [['mock2', '2 mocktails each'], ['custom', 'Custom'], ['none', 'Coupons off']] : [['mock2', '2 mocktails each'], ['cock1', '1 cocktail each'], ['choice', '2 mocktails or 1 cocktail'], ['custom', 'Custom'], ['none', 'No coupons']];
+  const b = S.bar, alc = S.ev.alcohol, modes = S.ev.kids ? [['mock2', '2 mocktails'], ['custom', 'Custom'], ['none', 'None']] : [['mock2', '2 mocktails'], ['cock1', '1 cocktail'], ['choice', '2 mocktails or 1 cocktail'], ['custom', 'Custom'], ['none', 'None']];
   const sample = { name: 'Sample guest', set: 'ABCD-EFGH', under18: false }, s18 = Object.assign({}, sample, { under18: true });
   $('#app').innerHTML = `<section class="card"><h2>${S.ev.kids ? 'Mocktail coupons' : 'Bar drink coupons'}</h2><p class="hint">Each guest gets exactly one coupon set. Change the mix any time: codes stay the same.</p>
     ${S.ev.kids ? `<p class="note" data-testid="kids-drinks">${esc(C.kids.hostNote)}</p>` : `<label class="row"><input type="checkbox" id="alc" ${alc ? 'checked' : ''} style="width:auto" data-testid="alc"> Alcohol is served at this event</label>`}
     ${alc ? `<p class="note warm" data-testid="host-resp">${esc(C.hostResponsibility)}</p>` : ''}
-    <div class="seg" id="mode">${modes.map(([k, l]) => `<button data-v="${k}" class="${b.mode === k ? 'on' : ''}" data-testid="mode-${k}" ${!alc && ['cock1', 'choice'].includes(k) ? 'disabled' : ''}>${l}</button>`).join('')}</div>
+    <label>Coupons per guest<select id="mode" data-testid="mode">${modes.map(([k, l]) => `<option value="${k}" ${b.mode === k ? 'selected' : ''} ${!alc && ['cock1', 'choice'].includes(k) ? 'disabled' : ''}>${l}</option>`).join('')}</select></label>
+    ${b.mode === 'mock2' ? `<label>Mocktails per guest<input id="cmc" type="number" min="1" max="10" value="${b.mc == null ? 2 : b.mc}" data-testid="count"></label>` : ''}${b.mode === 'cock1' ? `<label>Cocktails per guest (18+)<input id="ccc" type="number" min="1" max="10" value="${b.cc == null ? 1 : b.cc}" data-testid="count"></label>` : ''}
     ${b.mode === 'custom' ? `<div class="grid2 mt"><label>Mocktails per guest<input id="cm" type="number" min="0" max="10" value="${b.m}" data-testid="cm"></label>${alc ? `<label>Cocktails per guest (18+)<input id="cc" type="number" min="0" max="10" value="${b.c}" data-testid="cc"></label>` : ''}</div>` : ''}
     <p class="hint" data-testid="rule">Each guest: ${esc(describe(entitlement(sample)))}.${S.ev.kids ? '' : ` Guests marked under 18: ${esc(describe(entitlement(s18)))}.`}</p>
     <h3>What a guest sees</h3>${entitlement(sample).choice ? `<p>${esc(C.coupon.choiceLine)}</p>` : ''}${coupons(sample).list.filter((c, i, l) => l.findIndex(x => x.kind === c.kind) === i).map(c => couponCard(couponText(sample, c), c.kind)).join('')}${S.ev.kids && coupons(sample).list.length ? `<p class="hint" data-testid="kids-ingredients">${esc(fillT(C.kids.ingredients, vars(null)))}</p>` : ''}<p class="hint">${esc(C.coupon.smallPrint)}</p></section>`;
   if ($('#alc')) $('#alc').onchange = e => { S.ev.alcohol = e.target.checked; if (!S.ev.alcohol && ['cock1', 'choice'].includes(b.mode)) b.mode = 'mock2'; save(); render(); };
-  $$('#mode button').forEach(x => x.onclick = () => { if (x.disabled) return; b.mode = x.dataset.v; save(); render(); });
+  $('#mode').onchange = e => { b.mode = e.target.value; save(); render(); };
+  const cmc = $('#cmc'), ccc = $('#ccc'); if (cmc) cmc.onchange = () => { b.mc = Math.max(1, clamp(cmc.value)); save(); render(); }; if (ccc) ccc.onchange = () => { b.cc = Math.max(1, clamp(ccc.value)); save(); render(); };
   const cm = $('#cm'), cc = $('#cc'); if (cm) cm.onchange = () => { b.m = clamp(cm.value); save(); render(); }; if (cc) cc.onchange = () => { b.c = clamp(cc.value); save(); render(); };
 }
 // 'none' mode: no coupons at all
-const _ent = entitlement; entitlement = function (g) { if (S.bar.mode === 'none') return { m: 0, c: 0, choice: false }; if (S.ev.kids) return { m: S.bar.mode === 'custom' ? clamp(S.bar.m) : 2, c: 0, choice: false }; // kids: mocktails only, never a cocktail or the choice line
+const _ent = entitlement; entitlement = function (g) { if (S.bar.mode === 'none') return { m: 0, c: 0, choice: false }; if (S.ev.kids) return { m: S.bar.mode === 'custom' ? clamp(S.bar.m) : clamp(S.bar.mc == null ? 2 : S.bar.mc), c: 0, choice: false }; // kids: mocktails only, never a cocktail or the choice line
   const e = _ent(g); if (S.ev.kids || g.under18) { e.c = 0; e.choice = false; } return e; }; // eslint-disable-line no-func-assign
 
 function rSend() {
@@ -244,7 +241,7 @@ function guestView() {
   $('#tabs').hidden = true; $('#walletBtn').hidden = true;
   if (!d || !d.t) { $('#app').innerHTML = '<section class="card"><h2>This invite link isn\'t recognised</h2><p class="hint">Ask your host to send it again.</p></section>'; return; }
   const R = C.rsvp, K = C.kids, kids = !!d.kids;
-  setPage(kids);
+  setPage(kids, d.pb);
   const form = { name: d.guest_name, plus: 1, adults: 1, diet: '', dietOk: false, allergy: '', parentOk: false, msg: '' };
   const read = () => { const v = id => ($('#' + id) || {}).value, ck = id => !!($('#' + id) || {}).checked; form.name = v('rn') || ''; form.msg = v('rm') || ''; if (kids) { form.adults = Math.max(0, +v('rad') || 0); form.parentOk = ck('rpc'); form.allergy = form.parentOk ? (v('ra') || '').trim() : ''; } else { form.plus = Math.max(1, +v('rp') || 1); form.dietOk = ck('rdc'); form.diet = form.dietOk ? (v('rd') || '').trim() : ''; } };
   const draw = st => {
