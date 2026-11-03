@@ -1,5 +1,5 @@
 /* User-facing wording with {placeholders}. Copied EXACTLY from /workspace/ops/content/myparty-invites/copy.md
-   (Legal passed with edits, 3 Nov 2026 15:05; token wording 15:09, the Building note in brackets on the resend line dropped as it is confirmed). Swap text here only. {privacy_link} and token placeholders stay
+   (Legal passed with edits, 3 Nov 2026 15:05; token wording 15:09; Invite & Pour edits 17:08 (sending line, confirmYes, privacy RSVP paragraph); the Building note in brackets on the resend line dropped as it is confirmed). Swap text here only. {privacy_link} and token placeholders stay
    UNFILLED on purpose: Mal sets them. Lines under `ui` are NOT in copy.md (engineering placeholders for Legal/Content). */
 window.IE_COPY = {
   email: {
@@ -25,7 +25,7 @@ window.IE_COPY = {
     heading: "Will you be there?",
     yes: "Yes, I'll be there", no: "Sorry, can't make it", maybe: "Maybe",
     fName: "Your name", fPlus: "Number of guests", fDiet: "Dietary needs (optional)", fMsg: "Message for the host (optional)",
-    confirmYes: "You're on the list! Your drink coupons are ready. Save this email or screenshot them.",
+    confirmYes: "You're on the list! Your drink coupons are ready. Download or screenshot your QR code to keep your coupons.",
     confirmNo: "Thanks for letting {host_name} know. Hope to see you next time!"
   },
   coupon: {
@@ -36,7 +36,7 @@ window.IE_COPY = {
   },
   hostResponsibility: "If your event is at a licensed venue, the venue's licence and RSA rules apply. Under the NSW Liquor Act 2007 (s117), no one may supply alcohol to anyone under 18 without their parent or guardian's OK, and only responsibly. As the host, you're responsible for the drinks you offer. Makerman Services doesn't supply or serve alcohol.",
   under18Toggle: "Guest is under 18 = mocktail coupons only",
-  privacy: "My Party collects your name and email so {host_name} can manage the guest list. Dietary needs are collected only if you choose to share them (tick to consent). Your details are used only for this event, aren't sold or shared with anyone else, and are deleted on {delete_date} (30 days after the event). My Party is run by Makerman Services (ABN 22 791 780 670). Questions or deletion requests: makermanservices@gmail.com. Full privacy policy: {privacy_link}. You can also contact {host_name}.",
+  privacy: "My Party collects your name and email so {host_name} can manage the guest list. Dietary needs are collected only if you choose to share them (tick to consent). Your details are used only for this event, aren't sold or shared with anyone else, and are deleted on {delete_date} (30 days after the event). My Party is run by Makerman Services (ABN 22 791 780 670). Questions or deletion requests: makermanservices@gmail.com. Full privacy policy: {privacy_link}. You can also contact {host_name}. When you RSVP, we collect your name, email and Yes or No answer to show your RSVP and coupons to you and the host for this event only. The host sees your full email; the coupon link shows only a masked version. Everything is deleted 30 days after the event. For kids' parties, a parent or carer enters their own email.",
   tokens: [
     "Tokens are used only when you send invitations with the My Party invite engine.",
     "My Party is free. Sending invitations uses tokens: A$1.17 (AUD) per guest.",
@@ -74,7 +74,7 @@ window.IE_COPY = {
   ui: { // NOT in copy.md: placeholders for Legal/Content to check
     // New 3 Nov 16:52-16:53 (Mal): no Gmail sign-in; coupons created on RSVP yes and opened from a QR code. Needs Legal/Content review.
     emailSoonHead: "Email sending coming soon.",
-    emailSoon: "For now, copy or share each guest's invite link by text, WhatsApp or your own email. Guests RSVP from the link with just their name and a Yes or No. No sign-in needed.",
+    emailSoon: "For now, copy or share each guest's invite link by text, WhatsApp or your own email. Guests RSVP from the link with their name, email and a Yes or No. No sign-in needed.",
     couponAfterYes: "Your drink coupons and a QR code for the bar appear after you RSVP yes.",
     kidsCouponAfterYes: "Mocktail coupons and a QR code appear after you RSVP yes.",
     qrHead: "Your coupon QR code",
